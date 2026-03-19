@@ -6,6 +6,7 @@ import { ArchivesModule } from './modules/archives/archives.module';
 import { BindingsModule } from './modules/bindings/bindings.module';
 import { CrawlJobsModule } from './modules/crawl-jobs/crawl-jobs.module';
 import { CrawlRunsModule } from './modules/crawl-runs/crawl-runs.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { HealthModule } from './modules/health/health.module';
 import { IdentityModule } from './modules/identity/identity.module';
 import { PrismaModule } from './modules/prisma/prisma.module';
@@ -26,6 +27,7 @@ import { PrismaModule } from './modules/prisma/prisma.module';
     BindingsModule,
     CrawlJobsModule,
     CrawlRunsModule,
+    DashboardModule,
   ],
 })
 export class AppModule {}

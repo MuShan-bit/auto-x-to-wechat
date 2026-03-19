@@ -116,6 +116,55 @@ describe('AppController (e2e)', () => {
       });
   });
 
+  it('/dashboard/summary returns current binding, latest run and archive count', async () => {
+    const createResponse = await request(app.getHttpServer())
+      .post('/bindings')
+      .set(internalHeaders)
+      .send({
+        xUserId: 'x-user-dashboard',
+        username: 'dashboard_owner',
+        displayName: 'Dashboard Owner',
+        credentialSource: 'WEB_LOGIN',
+        credentialPayload: '{"cookie":"dashboard"}',
+        crawlEnabled: true,
+        crawlIntervalMinutes: 30,
+      })
+      .expect(201);
+
+    const binding = createResponse.body as { id: string };
+
+    await request(app.getHttpServer())
+      .post(`/bindings/${binding.id}/crawl-now`)
+      .set(internalHeaders)
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .get('/dashboard/summary')
+      .set(internalHeaders)
+      .expect(200)
+      .expect(({ body }) => {
+        const payload = body as {
+          archiveCount: number;
+          binding: {
+            id: string;
+            username: string;
+          } | null;
+          latestRun: {
+            status: string;
+            newCount: number;
+          } | null;
+          nextRunAt: string | null;
+        };
+
+        expect(payload.binding?.id).toBe(binding.id);
+        expect(payload.binding?.username).toBe('dashboard_owner');
+        expect(payload.latestRun?.status).toBe('SUCCESS');
+        expect(payload.latestRun?.newCount).toBe(2);
+        expect(payload.archiveCount).toBe(2);
+        expect(payload.nextRunAt).not.toBeNull();
+      });
+  });
+
   it('/bindings current/create/disable flow works', async () => {
     const createResponse = await request(app.getHttpServer())
       .post('/bindings')
