@@ -6,6 +6,12 @@ type ApiRequestInit = RequestInit & {
   path: string;
 };
 
+export type ApiRequestUser = {
+  email?: string | null;
+  id: string;
+  role?: string | null;
+};
+
 type ApiErrorPayload = {
   error?: string;
   message?: string | string[];
@@ -60,26 +66,23 @@ export function getApiErrorMessage(
   return fallback;
 }
 
-export async function apiRequest<T>({ path, ...init }: ApiRequestInit): Promise<T> {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    redirect(`/login?callbackUrl=${encodeURIComponent(path)}`);
-  }
-
+async function sendApiRequest<T>(
+  user: ApiRequestUser,
+  { path, ...init }: ApiRequestInit,
+): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body && !headers.has("content-type")) {
     headers.set("content-type", "application/json");
   }
   headers.set("x-internal-auth", process.env.INTERNAL_API_SHARED_SECRET ?? "");
-  headers.set("x-user-id", session.user.id);
+  headers.set("x-user-id", user.id);
 
-  if (session.user.email) {
-    headers.set("x-user-email", session.user.email);
+  if (user.email) {
+    headers.set("x-user-email", user.email);
   }
 
-  if (session.user.role) {
-    headers.set("x-user-role", session.user.role);
+  if (user.role) {
+    headers.set("x-user-role", user.role);
   }
 
   const response = await fetch(`${process.env.INTERNAL_API_BASE_URL}${path}`, {
@@ -103,4 +106,34 @@ export async function apiRequest<T>({ path, ...init }: ApiRequestInit): Promise<
   }
 
   return JSON.parse(payload) as T;
+}
+
+export async function apiRequestWithUser<T>(
+  user: ApiRequestUser,
+  init: ApiRequestInit,
+): Promise<T> {
+  return sendApiRequest(user, init);
+}
+
+export async function apiRequest<T>({
+  path,
+  ...init
+}: ApiRequestInit): Promise<T> {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    redirect(`/login?callbackUrl=${encodeURIComponent(path)}`);
+  }
+
+  return sendApiRequest(
+    {
+      id: session.user.id,
+      email: session.user.email,
+      role: session.user.role,
+    },
+    {
+      path,
+      ...init,
+    },
+  );
 }
