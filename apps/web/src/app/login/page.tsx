@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import { LockKeyhole, Sparkles } from "lucide-react";
 import { LoginForm } from "./login-form";
+import { LoadingState } from "@/components/loading-state";
 import { Badge } from "@/components/ui/badge";
 
 export default function LoginPage() {
@@ -31,7 +33,16 @@ export default function LoginPage() {
         </div>
       </section>
 
-      <LoginForm />
+      <Suspense
+        fallback={
+          <LoadingState
+            title="正在准备登录表单"
+            description="正在读取登录回跳地址并初始化会话表单。"
+          />
+        }
+      >
+        <LoginForm />
+      </Suspense>
     </div>
   );
 }
