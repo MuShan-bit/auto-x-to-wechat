@@ -1,5 +1,5 @@
 import { CrawlRunStatus, CrawlTriggerType, type Prisma } from '@prisma/client';
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 type CreateCrawlRunInput = {
@@ -30,6 +30,21 @@ export const crawlRunExecutionArgs = {
   },
 } satisfies Prisma.CrawlRunDefaultArgs;
 
+const crawlRunDetailArgs = {
+  include: {
+    binding: true,
+    crawlJob: true,
+    runPosts: {
+      orderBy: {
+        createdAt: 'asc',
+      },
+      include: {
+        archivedPost: true,
+      },
+    },
+  },
+} satisfies Prisma.CrawlRunDefaultArgs;
+
 export type CrawlExecutionRun = Prisma.CrawlRunGetPayload<
   typeof crawlRunExecutionArgs
 >;
@@ -56,12 +71,26 @@ export class CrawlRunsService {
   getById(id: string) {
     return this.prisma.crawlRun.findUnique({
       where: { id },
-      include: {
-        binding: true,
-        crawlJob: true,
-        runPosts: true,
-      },
+      ...crawlRunDetailArgs,
     });
+  }
+
+  async getDetailByUser(userId: string, runId: string) {
+    const run = await this.prisma.crawlRun.findFirst({
+      where: {
+        id: runId,
+        binding: {
+          userId,
+        },
+      },
+      ...crawlRunDetailArgs,
+    });
+
+    if (!run) {
+      throw new NotFoundException('Crawl run not found');
+    }
+
+    return run;
   }
 
   getExecutionRunById(id: string): Promise<CrawlExecutionRun | null> {

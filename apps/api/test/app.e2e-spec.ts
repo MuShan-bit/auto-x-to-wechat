@@ -360,6 +360,72 @@ describe('AppController (e2e)', () => {
       });
   });
 
+  it('/runs/:id returns crawl run detail with processing items scoped to the current user', async () => {
+    const bindingResponse = await request(app.getHttpServer())
+      .post('/bindings')
+      .set(internalHeaders)
+      .send({
+        xUserId: 'x-user-run-detail-own',
+        username: 'run_detail_owner',
+        displayName: 'Run Detail Owner',
+        credentialSource: 'WEB_LOGIN',
+        credentialPayload: '{"cookie":"run-detail-owner"}',
+        crawlEnabled: true,
+        crawlIntervalMinutes: 30,
+      })
+      .expect(201);
+
+    const binding = bindingResponse.body as { id: string };
+
+    const crawlResponse = await request(app.getHttpServer())
+      .post(`/bindings/${binding.id}/crawl-now`)
+      .set(internalHeaders)
+      .expect(201);
+
+    const run = crawlResponse.body as { id: string };
+
+    await request(app.getHttpServer())
+      .get(`/runs/${run.id}`)
+      .set(internalHeaders)
+      .expect(200)
+      .expect(({ body }) => {
+        const payload = body as {
+          id: string;
+          binding: { userId: string; username: string };
+          fetchedCount: number;
+          newCount: number;
+          skippedCount: number;
+          failedCount: number;
+          runPosts: Array<{
+            actionType: string;
+            reason: string | null;
+            archivedPost: null | {
+              id: string;
+              xPostId: string;
+            };
+          }>;
+        };
+
+        expect(payload.id).toBe(run.id);
+        expect(payload.binding.userId).toBe('user_demo');
+        expect(payload.binding.username).toBe('run_detail_owner');
+        expect(payload.fetchedCount).toBeGreaterThanOrEqual(1);
+        expect(
+          payload.newCount + payload.skippedCount + payload.failedCount,
+        ).toBe(payload.fetchedCount);
+        expect(payload.runPosts.length).toBeGreaterThanOrEqual(1);
+        expect(payload.runPosts[0]?.actionType).toBeTruthy();
+        expect(payload.runPosts[0]?.reason).toBeTruthy();
+        expect(payload.runPosts[0]?.archivedPost?.id).toBeTruthy();
+        expect(payload.runPosts[0]?.archivedPost?.xPostId).toBeTruthy();
+      });
+
+    await request(app.getHttpServer())
+      .get(`/runs/${run.id}`)
+      .set(otherInternalHeaders)
+      .expect(404);
+  });
+
   it('/bindings current/create/disable flow works', async () => {
     const createResponse = await request(app.getHttpServer())
       .post('/bindings')

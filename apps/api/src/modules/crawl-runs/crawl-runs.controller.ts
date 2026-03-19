@@ -1,7 +1,8 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { InternalAuthGuard } from '../../common/auth/internal-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { RequestUser } from '../../common/auth/request-user.type';
+import { serializeForJson } from '../../common/utils/json-serializer';
 import { CrawlRunsService } from './crawl-runs.service';
 
 @Controller('runs')
@@ -19,5 +20,12 @@ export class CrawlRunsController {
       page: page ? Number(page) : undefined,
       pageSize: pageSize ? Number(pageSize) : undefined,
     });
+  }
+
+  @Get(':id')
+  getRunDetail(@CurrentUser() user: RequestUser, @Param('id') runId: string) {
+    return this.crawlRunsService
+      .getDetailByUser(user.id, runId)
+      .then((payload) => serializeForJson(payload));
   }
 }
