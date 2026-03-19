@@ -15,6 +15,12 @@ describe('AppController (e2e)', () => {
     'x-user-email': 'user_demo@example.com',
     'x-user-role': 'USER',
   };
+  const otherInternalHeaders = {
+    'x-internal-auth': 'replace-with-an-internal-shared-secret',
+    'x-user-id': 'user_other',
+    'x-user-email': 'user_other@example.com',
+    'x-user-role': 'USER',
+  };
 
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -40,16 +46,37 @@ describe('AppController (e2e)', () => {
       },
     });
 
+    await prisma.user.upsert({
+      where: { id: 'user_other' },
+      update: {
+        email: 'user_other@example.com',
+        name: 'Other User',
+        role: UserRole.USER,
+      },
+      create: {
+        id: 'user_other',
+        email: 'user_other@example.com',
+        name: 'Other User',
+        role: UserRole.USER,
+      },
+    });
+
     await prisma.crawlJob.deleteMany({
       where: {
         binding: {
-          userId: 'user_demo',
+          userId: {
+            in: ['user_demo', 'user_other'],
+          },
         },
       },
     });
 
     await prisma.xAccountBinding.deleteMany({
-      where: { userId: 'user_demo' },
+      where: {
+        userId: {
+          in: ['user_demo', 'user_other'],
+        },
+      },
     });
   });
 
@@ -148,6 +175,116 @@ describe('AppController (e2e)', () => {
 
         expect(payload.status).toBe('DISABLED');
         expect(payload.crawlEnabled).toBe(false);
+      });
+  });
+
+  it('/bindings enforces per-user isolation across read and write operations', async () => {
+    const ownBindingResponse = await request(app.getHttpServer())
+      .post('/bindings')
+      .set(internalHeaders)
+      .send({
+        xUserId: 'x-user-demo',
+        username: 'demo_owner',
+        displayName: 'Demo Owner',
+        credentialSource: 'WEB_LOGIN',
+        credentialPayload: '{"cookie":"owner"}',
+        crawlEnabled: true,
+        crawlIntervalMinutes: 30,
+      })
+      .expect(201);
+
+    const ownBinding = ownBindingResponse.body as {
+      id: string;
+      username: string;
+    };
+
+    const otherBindingResponse = await request(app.getHttpServer())
+      .post('/bindings')
+      .set(otherInternalHeaders)
+      .send({
+        xUserId: 'x-user-other',
+        username: 'other_owner',
+        displayName: 'Other Owner',
+        credentialSource: 'WEB_LOGIN',
+        credentialPayload: '{"cookie":"other"}',
+        crawlEnabled: true,
+        crawlIntervalMinutes: 45,
+      })
+      .expect(201);
+
+    const otherBinding = otherBindingResponse.body as {
+      id: string;
+      username: string;
+    };
+
+    expect(ownBinding.username).toBe('demo_owner');
+    expect(otherBinding.username).toBe('other_owner');
+
+    await request(app.getHttpServer())
+      .get('/bindings/current')
+      .set(internalHeaders)
+      .expect(200)
+      .expect(({ body }) => {
+        const payload = body as {
+          id: string;
+          userId: string;
+          username: string;
+        };
+
+        expect(payload.id).toBe(ownBinding.id);
+        expect(payload.userId).toBe('user_demo');
+        expect(payload.username).toBe('demo_owner');
+      });
+
+    await request(app.getHttpServer())
+      .get('/bindings/current')
+      .set(otherInternalHeaders)
+      .expect(200)
+      .expect(({ body }) => {
+        const payload = body as {
+          id: string;
+          userId: string;
+          username: string;
+        };
+
+        expect(payload.id).toBe(otherBinding.id);
+        expect(payload.userId).toBe('user_other');
+        expect(payload.username).toBe('other_owner');
+      });
+
+    await request(app.getHttpServer())
+      .patch(`/bindings/${ownBinding.id}/crawl-config`)
+      .set(otherInternalHeaders)
+      .send({
+        crawlEnabled: false,
+        crawlIntervalMinutes: 120,
+      })
+      .expect(404);
+
+    await request(app.getHttpServer())
+      .post(`/bindings/${ownBinding.id}/validate`)
+      .set(otherInternalHeaders)
+      .expect(404);
+
+    await request(app.getHttpServer())
+      .post(`/bindings/${ownBinding.id}/disable`)
+      .set(otherInternalHeaders)
+      .expect(404);
+
+    await request(app.getHttpServer())
+      .get('/bindings/current')
+      .set(internalHeaders)
+      .expect(200)
+      .expect(({ body }) => {
+        const payload = body as {
+          crawlEnabled: boolean;
+          crawlIntervalMinutes: number;
+          status: string;
+        };
+
+        expect(payload.status).toBe('ACTIVE');
+        expect(payload.crawlEnabled).toBe(true);
+        expect(payload.crawlIntervalMinutes).toBe(30);
       });
   });
 });

@@ -1,10 +1,5 @@
 import { BindingStatus, CredentialSource, type Prisma } from '@prisma/client';
-import {
-  Inject,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { CredentialCryptoService } from '../crypto/credential-crypto.service';
 import { FEED_CRAWLER_ADAPTER } from '../crawler/crawler.constants';
 import type { FeedCrawlerAdapter } from '../crawler/crawler.types';
@@ -204,18 +199,15 @@ export class BindingsService {
   }
 
   private async assertOwnership(userId: string, bindingId: string) {
-    const binding = await this.prisma.xAccountBinding.findUnique({
-      where: { id: bindingId },
+    const binding = await this.prisma.xAccountBinding.findFirst({
+      where: {
+        id: bindingId,
+        userId,
+      },
     });
 
     if (!binding) {
       throw new NotFoundException('Binding not found');
-    }
-
-    if (binding.userId !== userId) {
-      throw new ForbiddenException(
-        'Binding does not belong to the current user',
-      );
     }
 
     return binding;
