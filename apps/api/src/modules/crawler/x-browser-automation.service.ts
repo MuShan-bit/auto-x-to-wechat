@@ -1,7 +1,14 @@
+import { spawn, type ChildProcess } from 'child_process';
+import { existsSync } from 'fs';
+import { mkdtemp, rm } from 'fs/promises';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createServer } from 'net';
+import { join } from 'path';
+import { tmpdir } from 'os';
 import {
   chromium,
+  type Browser,
   type BrowserContext,
   type Cookie,
   type Page,
@@ -33,6 +40,12 @@ const DESKTOP_VIEWPORT = {
 } as const;
 const DEFAULT_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
+const BROWSER_CLOSE_TIMEOUT_MS = 3000;
+const CDP_CONNECT_TIMEOUT_MS = 15000;
+const DEFAULT_SYSTEM_CHROME_PATHS = [
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/Applications/Chromium.app/Contents/MacOS/Chromium',
+] as const;
 type ScrapedRawFeedPost = RawFeedResponse['posts'][number];
 
 @Injectable()
@@ -40,6 +53,15 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
   constructor(private readonly configService: ConfigService) {}
 
   async launchInteractiveLogin(loginUrl = LOGIN_URL) {
+    const systemChromeExecutablePath = this.resolveSystemChromeExecutablePath();
+
+    if (systemChromeExecutablePath) {
+      return this.launchInteractiveLoginWithSystemChrome(
+        systemChromeExecutablePath,
+        loginUrl,
+      );
+    }
+
     const browser = await this.launchBrowser(false);
     const context = await browser.newContext({
       viewport: DESKTOP_VIEWPORT,
@@ -118,11 +140,31 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
 
   async closeInteractiveLoginRuntime(runtime: InteractiveLoginRuntime) {
     if (runtime.page && !runtime.page.isClosed()) {
-      await runtime.page.close().catch(() => undefined);
+      await this.runWithTimeout(
+        runtime.page.close().catch(() => undefined),
+        BROWSER_CLOSE_TIMEOUT_MS,
+      );
     }
 
-    await runtime.context.close().catch(() => undefined);
-    await runtime.browser.close().catch(() => undefined);
+    await this.runWithTimeout(
+      runtime.context.close().catch(() => undefined),
+      BROWSER_CLOSE_TIMEOUT_MS,
+    );
+    await this.runWithTimeout(
+      runtime.browser.close().catch(() => undefined),
+      BROWSER_CLOSE_TIMEOUT_MS,
+    );
+
+    if (runtime.chromeProcess) {
+      await this.terminateChromeProcess(runtime.chromeProcess);
+    }
+
+    if (runtime.userDataDir) {
+      await rm(runtime.userDataDir, {
+        recursive: true,
+        force: true,
+      }).catch(() => undefined);
+    }
   }
 
   async validateCredential(payload: RealBrowserCredentialPayload) {
@@ -210,6 +252,70 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
     }
   }
 
+  private async launchInteractiveLoginWithSystemChrome(
+    executablePath: string,
+    loginUrl: string,
+  ) {
+    const debugPort = await this.reserveDebugPort();
+    const userDataDir = await mkdtemp(
+      join(tmpdir(), 'auto-x-to-wechat-login-'),
+    );
+    const chromeProcess = spawn(
+      executablePath,
+      [
+        '--new-window',
+        `--remote-debugging-port=${debugPort}`,
+        `--user-data-dir=${userDataDir}`,
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--disable-default-apps',
+        '--window-size=1440,1024',
+        'about:blank',
+      ],
+      {
+        stdio: 'ignore',
+      },
+    );
+
+    chromeProcess.unref();
+
+    try {
+      const browser = await this.connectToSystemChrome(
+        debugPort,
+        chromeProcess,
+      );
+      const context = await this.waitForBrowserContext(browser);
+      const page = await this.waitForContextPage(context);
+
+      await context.addInitScript(() => {
+        Object.defineProperty(window.navigator, 'webdriver', {
+          configurable: true,
+          get: () => undefined,
+        });
+      });
+      await page.setViewportSize(DESKTOP_VIEWPORT).catch(() => undefined);
+      await page.goto(loginUrl, {
+        waitUntil: 'domcontentloaded',
+      });
+      await page.bringToFront();
+
+      return {
+        browser,
+        chromeProcess,
+        context,
+        page,
+        userDataDir,
+      } satisfies InteractiveLoginRuntime;
+    } catch (error) {
+      await this.terminateChromeProcess(chromeProcess);
+      await rm(userDataDir, {
+        recursive: true,
+        force: true,
+      }).catch(() => undefined);
+      throw error;
+    }
+  }
+
   private async launchBrowser(headless: boolean) {
     const executablePath = this.configService.get<string>(
       'X_BROWSER_EXECUTABLE_PATH',
@@ -229,6 +335,159 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
 
       throw error;
     }
+  }
+
+  private resolveSystemChromeExecutablePath() {
+    const configuredPath = this.configService.get<string>(
+      'X_BROWSER_EXECUTABLE_PATH',
+    );
+
+    if (configuredPath) {
+      return configuredPath;
+    }
+
+    for (const candidate of DEFAULT_SYSTEM_CHROME_PATHS) {
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    }
+
+    return undefined;
+  }
+
+  private async connectToSystemChrome(
+    debugPort: number,
+    chromeProcess: ChildProcess,
+  ) {
+    const cdpEndpoint = await this.waitForCdpEndpoint(debugPort, chromeProcess);
+
+    return chromium.connectOverCDP(cdpEndpoint);
+  }
+
+  private async waitForCdpEndpoint(
+    debugPort: number,
+    chromeProcess: ChildProcess,
+  ) {
+    const startedAt = Date.now();
+    const endpoint = `http://127.0.0.1:${debugPort}`;
+
+    while (Date.now() - startedAt < CDP_CONNECT_TIMEOUT_MS) {
+      if (chromeProcess.exitCode !== null) {
+        throw new Error(
+          `System Chrome exited before CDP became available (exit code: ${chromeProcess.exitCode})`,
+        );
+      }
+
+      try {
+        const response = await fetch(`${endpoint}/json/version`);
+
+        if (response.ok) {
+          return endpoint;
+        }
+      } catch {
+        // Wait for Chrome to finish booting.
+      }
+
+      await this.sleep(200);
+    }
+
+    throw new Error('Timed out while waiting for system Chrome CDP endpoint');
+  }
+
+  private async waitForBrowserContext(browser: Browser) {
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < CDP_CONNECT_TIMEOUT_MS) {
+      const context = browser.contexts()[0];
+
+      if (context) {
+        return context;
+      }
+
+      await this.sleep(100);
+    }
+
+    throw new Error(
+      'Timed out while waiting for system Chrome browser context',
+    );
+  }
+
+  private async waitForContextPage(context: BrowserContext) {
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < CDP_CONNECT_TIMEOUT_MS) {
+      const page = context.pages()[0];
+
+      if (page) {
+        return page;
+      }
+
+      await this.sleep(100);
+    }
+
+    throw new Error('Timed out while waiting for system Chrome page');
+  }
+
+  private async terminateChromeProcess(chromeProcess: ChildProcess) {
+    if (chromeProcess.killed || chromeProcess.exitCode !== null) {
+      return;
+    }
+
+    chromeProcess.kill('SIGTERM');
+
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => {
+        if (chromeProcess.exitCode === null) {
+          chromeProcess.kill('SIGKILL');
+        }
+
+        resolve();
+      }, BROWSER_CLOSE_TIMEOUT_MS);
+
+      chromeProcess.once('exit', () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+    });
+  }
+
+  private async reserveDebugPort() {
+    return new Promise<number>((resolve, reject) => {
+      const server = createServer();
+
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => {
+        const address = server.address();
+
+        if (!address || typeof address === 'string') {
+          server.close(() => reject(new Error('Unable to reserve debug port')));
+          return;
+        }
+
+        const { port } = address;
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+
+          resolve(port);
+        });
+      });
+    });
+  }
+
+  private async runWithTimeout<T>(promise: Promise<T>, timeoutMs: number) {
+    return Promise.race([
+      promise,
+      this.sleep(timeoutMs).then(() => undefined as T | undefined),
+    ]);
+  }
+
+  private sleep(ms: number) {
+    return new Promise<void>((resolve) => {
+      setTimeout(resolve, ms);
+    });
   }
 
   private async ensureAuthenticatedShell(page: Page) {

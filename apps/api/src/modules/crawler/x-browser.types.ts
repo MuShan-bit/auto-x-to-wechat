@@ -1,3 +1,4 @@
+import type { ChildProcess } from 'child_process';
 import type { Browser, BrowserContext, Page } from 'playwright';
 import type { BindingProfile, RawFeedResponse } from './crawler.types';
 
@@ -27,8 +28,10 @@ export type RealBrowserCredentialPayload = {
 
 export type InteractiveLoginRuntime = {
   browser: Browser;
+  chromeProcess?: ChildProcess;
   context: BrowserContext;
   page: Page;
+  userDataDir?: string;
 };
 
 export type InteractiveLoginState =
