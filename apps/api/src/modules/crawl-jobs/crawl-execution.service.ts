@@ -1,8 +1,9 @@
 import { BindingStatus, CrawlRunStatus, type Prisma } from '@prisma/client';
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { ArchivesService } from '../archives/archives.service';
 import { convertNormalizedPostToRichText } from '../archives/rich-text.converter';
 import { renderRichTextToHtml } from '../archives/rich-text.renderer';
+import { createStructuredLogger } from '../../common/utils/structured-logger';
 import { CredentialCryptoService } from '../crypto/credential-crypto.service';
 import { FEED_CRAWLER_ADAPTER } from '../crawler/crawler.constants';
 import type { FeedCrawlerAdapter } from '../crawler/crawler.types';
@@ -16,7 +17,7 @@ import {
 
 @Injectable()
 export class CrawlExecutionService {
-  private readonly logger = new Logger(CrawlExecutionService.name);
+  private readonly logger = createStructuredLogger(CrawlExecutionService.name);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -71,6 +72,16 @@ export class CrawlExecutionService {
 
     const binding = runningRun.binding;
     const now = processedAt;
+    const logContext = {
+      userId: binding.userId,
+      bindingId: binding.id,
+      crawlRunId: runningRun.id,
+    } as const;
+
+    this.logger.log('crawl_run_started', {
+      ...logContext,
+      triggerType: runningRun.triggerType,
+    });
 
     try {
       const credentialPayload = this.credentialCryptoService.decrypt(
@@ -154,6 +165,12 @@ export class CrawlExecutionService {
               : `Failed to archive post ${post.xPostId}`;
           errorMessage = errorMessage ?? failureReason;
 
+          this.logger.warn('crawl_post_archive_failed', {
+            ...logContext,
+            xPostId: post.xPostId,
+            reason: failureReason,
+          });
+
           await this.crawlRunPostsService.createRecord({
             crawlRunId: runningRun.id,
             xPostId: post.xPostId,
@@ -194,15 +211,29 @@ export class CrawlExecutionService {
         }),
       ]);
 
-      return this.crawlRunsService.markCompleted(queuedRun.id, {
+      const completedRun = await this.crawlRunsService.markCompleted(
+        queuedRun.id,
+        {
+          status: completedStatus,
+          finishedAt: now,
+          fetchedCount: normalizedPosts.length,
+          newCount,
+          skippedCount,
+          failedCount,
+          errorMessage,
+        },
+      );
+
+      this.logger.log('crawl_run_completed', {
+        ...logContext,
         status: completedStatus,
-        finishedAt: now,
         fetchedCount: normalizedPosts.length,
         newCount,
         skippedCount,
         failedCount,
-        errorMessage,
       });
+
+      return completedRun;
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Unknown crawl worker error';
@@ -232,9 +263,11 @@ export class CrawlExecutionService {
         }),
       ]);
 
-      this.logger.error(
-        `Failed to process crawl run ${queuedRun.id} for binding ${binding.id}: ${message}`,
-      );
+      this.logger.error('crawl_run_failed', {
+        ...logContext,
+        authError: isAuthError,
+        message,
+      });
 
       return this.crawlRunsService.markCompleted(queuedRun.id, {
         status: CrawlRunStatus.FAILED,

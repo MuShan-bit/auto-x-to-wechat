@@ -3,6 +3,7 @@ import {
   CrawlRunStatus,
   CrawlTriggerType,
 } from '@prisma/client';
+import { Logger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { CRAWL_RUN_DISPATCHER } from './crawl-run-dispatcher.constants';
 import { CrawlJobsScheduler } from './crawl-jobs.scheduler';
@@ -44,10 +45,12 @@ describe('CrawlJobsScheduler', () => {
   });
 
   afterEach(async () => {
+    jest.restoreAllMocks();
     await moduleRef.close();
   });
 
   it('claims due jobs every minute and hands them to the crawl worker', async () => {
+    const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation();
     const now = new Date('2026-03-19T05:00:00.000Z');
     const claimedRun = {
       id: 'run_1',
@@ -123,5 +126,24 @@ describe('CrawlJobsScheduler', () => {
         },
       ],
     });
+    expect(logSpy).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: 'crawl_scheduler_scan_completed',
+        scannedAt: now.toISOString(),
+        total: 1,
+        jobs: [
+          {
+            runId: 'run_1',
+            jobId: 'job_1',
+            bindingId: 'binding_1',
+            bindingUserId: 'user_1',
+            username: 'scheduler_due',
+            nextRunAt: '2026-03-19T05:15:00.000Z',
+            triggerType: CrawlTriggerType.SCHEDULED,
+            status: CrawlRunStatus.SUCCESS,
+          },
+        ],
+      }),
+    );
   });
 });

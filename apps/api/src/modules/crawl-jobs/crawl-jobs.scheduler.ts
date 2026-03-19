@@ -1,6 +1,7 @@
 import { CrawlRunStatus, CrawlTriggerType } from '@prisma/client';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { createStructuredLogger } from '../../common/utils/structured-logger';
 import { CRAWL_RUN_DISPATCHER } from './crawl-run-dispatcher.constants';
 import type { CrawlRunDispatcher } from './crawl-run-dispatcher.types';
 import { CrawlJobsService } from './crawl-jobs.service';
@@ -18,7 +19,7 @@ type DueCrawlJobSnapshot = {
 
 @Injectable()
 export class CrawlJobsScheduler {
-  private readonly logger = new Logger(CrawlJobsScheduler.name);
+  private readonly logger = createStructuredLogger(CrawlJobsScheduler.name);
 
   constructor(
     private readonly crawlJobsService: CrawlJobsService,
@@ -56,9 +57,16 @@ export class CrawlJobsScheduler {
     }));
 
     if (jobs.length > 0) {
-      this.logger.log(`Claimed ${jobs.length} due crawl jobs`);
+      this.logger.log('crawl_scheduler_scan_completed', {
+        scannedAt: now.toISOString(),
+        total: jobs.length,
+        jobs,
+      });
     } else {
-      this.logger.debug('No due crawl jobs found in this scan window');
+      this.logger.debug('crawl_scheduler_scan_completed', {
+        scannedAt: now.toISOString(),
+        total: 0,
+      });
     }
 
     return {

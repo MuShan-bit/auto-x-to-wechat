@@ -5,6 +5,7 @@ import {
   CredentialSource,
   UserRole,
 } from '@prisma/client';
+import { Logger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AppModule } from '../../app.module';
 import { CredentialCryptoService } from '../crypto/credential-crypto.service';
@@ -50,10 +51,12 @@ describe('CrawlExecutionService', () => {
   });
 
   afterEach(async () => {
+    jest.restoreAllMocks();
     await moduleRef.close();
   });
 
   it('processes a queued crawl run into archives and updates run state', async () => {
+    const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation();
     const binding = await prisma.xAccountBinding.create({
       data: {
         userId: 'worker_owner',
@@ -120,5 +123,29 @@ describe('CrawlExecutionService', () => {
 
     expect(storedBinding?.lastCrawledAt).not.toBeNull();
     expect(storedBinding?.lastErrorMessage).toBeNull();
+    expect(logSpy).toHaveBeenNthCalledWith(
+      1,
+      JSON.stringify({
+        event: 'crawl_run_started',
+        userId: 'worker_owner',
+        bindingId: binding.id,
+        crawlRunId: run.id,
+        triggerType: CrawlTriggerType.MANUAL,
+      }),
+    );
+    expect(logSpy).toHaveBeenNthCalledWith(
+      2,
+      JSON.stringify({
+        event: 'crawl_run_completed',
+        userId: 'worker_owner',
+        bindingId: binding.id,
+        crawlRunId: run.id,
+        status: CrawlRunStatus.SUCCESS,
+        fetchedCount: 2,
+        newCount: 2,
+        skippedCount: 0,
+        failedCount: 0,
+      }),
+    );
   });
 });
