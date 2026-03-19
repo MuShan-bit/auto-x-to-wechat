@@ -9,8 +9,6 @@ export type BindingActionState = {
   success?: string;
 };
 
-const initialActionState = {} satisfies BindingActionState;
-
 const credentialSourceSchema = z.enum(["WEB_LOGIN", "COOKIE_IMPORT", "EXTENSION"]);
 
 const bindingSchema = z.object({
@@ -202,5 +200,3 @@ export async function disableBindingAction(
     } satisfies BindingActionState;
   }
 }
-
-export { initialActionState };

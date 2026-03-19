@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { useSearchParams } from "next/navigation";
 import { loginAction, type LoginFormState } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +10,9 @@ import { Input } from "@/components/ui/input";
 const initialState: LoginFormState = {};
 
 export function LoginForm() {
+  const searchParams = useSearchParams();
   const [state, formAction, isPending] = useActionState(loginAction, initialState);
+  const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
 
   return (
     <Card className="rounded-[2rem] border-border/70 bg-white/95 shadow-[0_24px_80px_-40px_rgba(87,62,22,0.35)]">
@@ -18,6 +21,7 @@ export function LoginForm() {
       </CardHeader>
       <CardContent>
         <form action={formAction} className="space-y-5">
+          <input type="hidden" name="callbackUrl" value={callbackUrl} />
           <div className="space-y-2">
             <label className="text-sm font-medium" htmlFor="email">
               邮箱
@@ -35,6 +39,9 @@ export function LoginForm() {
               {state.error}
             </p>
           ) : null}
+          <p className="text-sm leading-6 text-muted-foreground">
+            登录成功后会在 PostgreSQL 中写入 NextAuth 会话，并由服务端读取数据库会话保护页面。
+          </p>
           <Button className="w-full rounded-full bg-[#2d4d3f] hover:bg-[#20372d]" disabled={isPending} type="submit">
             {isPending ? "登录中..." : "进入系统"}
           </Button>

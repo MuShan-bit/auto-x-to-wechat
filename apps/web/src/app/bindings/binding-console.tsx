@@ -3,7 +3,6 @@
 import { useActionState } from "react";
 import {
   disableBindingAction,
-  initialActionState,
   revalidateBindingAction,
   type BindingActionState,
   updateCrawlConfigAction,
@@ -50,6 +49,8 @@ export type BindingRecord = {
 type BindingConsoleProps = {
   currentBinding: BindingRecord | null;
 };
+
+const initialActionState: BindingActionState = {};
 
 const credentialSourceOptions = [
   { value: "WEB_LOGIN", label: "网页登录态" },

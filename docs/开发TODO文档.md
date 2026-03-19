@@ -133,7 +133,7 @@
 完成标准：前端支持至少一种登录方式，能够创建用户和会话。
 依赖：`T102`、`T111`。
 
-- [ ] `T202` `P1` 打通 NextAuth 与 Prisma Adapter。
+- [x] `T202` `P1` 打通 NextAuth 与 Prisma Adapter。
 完成标准：用户、会话、认证账户信息可持久化到 PostgreSQL。
 依赖：`T201`、`T112`。
 

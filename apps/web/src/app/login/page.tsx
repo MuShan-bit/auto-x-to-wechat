@@ -13,8 +13,9 @@ export default function LoginPage() {
           登录后才能访问绑定、归档和任务页面
         </h1>
         <p className="max-w-2xl text-sm leading-7 text-white/75 sm:text-base">
-          当前开发阶段已接入 NextAuth 凭证登录。后续可以在此基础上扩展为邮箱验证码登录
-          或 OAuth 登录，而不需要推翻现有受保护路由结构。
+          当前开发阶段使用平台账号密码登录，并通过 NextAuth + Prisma Adapter
+          将用户会话持久化到 PostgreSQL。后续再扩展邮箱验证码或 OAuth 登录时，
+          不需要推翻现有受保护路由结构。
         </p>
         <div className="grid gap-3 rounded-[2rem] border border-white/10 bg-white/8 p-5 text-sm text-white/85">
           <div className="flex items-center gap-2 font-medium">
