@@ -157,6 +157,11 @@ describe('AppController (e2e)', () => {
             id: string;
             username: string;
           } | null;
+          errorSummary: {
+            failedPostCount: number;
+            failedRunCount: number;
+            recentFailures: unknown[];
+          };
           latestRun: {
             status: string;
             newCount: number;
@@ -170,6 +175,79 @@ describe('AppController (e2e)', () => {
         expect(payload.latestRun?.newCount).toBe(2);
         expect(payload.archiveCount).toBe(2);
         expect(payload.nextRunAt).not.toBeNull();
+        expect(payload.errorSummary?.failedRunCount).toBe(0);
+        expect(payload.errorSummary?.failedPostCount).toBe(0);
+        expect(payload.errorSummary?.recentFailures).toEqual([]);
+      });
+  });
+
+  it('/dashboard/summary aggregates failed crawl runs for alerting', async () => {
+    const createResponse = await request(app.getHttpServer())
+      .post('/bindings')
+      .set(internalHeaders)
+      .send({
+        xUserId: 'x-user-dashboard-alerts',
+        username: 'dashboard_alert_owner',
+        displayName: 'Dashboard Alert Owner',
+        credentialSource: 'WEB_LOGIN',
+        credentialPayload: '{"cookie":"dashboard-alerts"}',
+        crawlEnabled: true,
+        crawlIntervalMinutes: 30,
+      })
+      .expect(201);
+
+    const binding = createResponse.body as { id: string; crawlJob?: { id: string } };
+    const persistedBinding = await prisma.xAccountBinding.findUniqueOrThrow({
+      where: {
+        id: binding.id,
+      },
+      include: {
+        crawlJob: true,
+      },
+    });
+
+    await prisma.crawlRun.createMany({
+      data: [
+        {
+          bindingId: persistedBinding.id,
+          crawlJobId: persistedBinding.crawlJob?.id ?? null,
+          triggerType: CrawlTriggerType.SCHEDULED,
+          status: CrawlRunStatus.FAILED,
+          failedCount: 1,
+          errorMessage: 'Crawler auth failed',
+          createdAt: new Date('2026-03-19T05:01:00.000Z'),
+          startedAt: new Date('2026-03-19T05:00:00.000Z'),
+          finishedAt: new Date('2026-03-19T05:01:00.000Z'),
+        },
+        {
+          bindingId: persistedBinding.id,
+          crawlJobId: persistedBinding.crawlJob?.id ?? null,
+          triggerType: CrawlTriggerType.RETRY,
+          status: CrawlRunStatus.PARTIAL_FAILED,
+          failedCount: 2,
+          errorMessage: 'Two posts failed to archive',
+          createdAt: new Date('2026-03-19T06:02:00.000Z'),
+          startedAt: new Date('2026-03-19T06:00:00.000Z'),
+          finishedAt: new Date('2026-03-19T06:02:00.000Z'),
+        },
+      ],
+    });
+
+    await request(app.getHttpServer())
+      .get('/dashboard/summary')
+      .set(internalHeaders)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.errorSummary.failedRunCount).toBe(2);
+        expect(body.errorSummary.failedPostCount).toBe(3);
+        expect(body.errorSummary.recentFailures).toHaveLength(2);
+        expect(
+          body.errorSummary.recentFailures.map((item: { status: string }) => item.status),
+        ).toEqual(['PARTIAL_FAILED', 'FAILED']);
+        expect(body.errorSummary.recentFailures[0]?.failedCount).toBe(2);
+        expect(body.errorSummary.recentFailures[0]?.errorMessage).toBe(
+          'Two posts failed to archive',
+        );
       });
   });
 

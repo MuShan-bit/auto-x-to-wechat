@@ -34,6 +34,19 @@ type DashboardSummaryResponse = {
     errorMessage: string | null;
   } | null;
   nextRunAt: string | null;
+  errorSummary: {
+    failedRunCount: number;
+    failedPostCount: number;
+    recentFailures: Array<{
+      id: string;
+      status: "FAILED" | "PARTIAL_FAILED";
+      triggerType: "MANUAL" | "SCHEDULED" | "RETRY";
+      errorMessage: string | null;
+      failedCount: number;
+      createdAt: string;
+      finishedAt: string | null;
+    }>;
+  };
 };
 
 function formatDateTime(value: string | null | undefined) {
@@ -392,6 +405,83 @@ export default async function DashboardPage() {
               </CardContent>
             </Card>
           </section>
+
+          <Card className="rounded-[2rem] border-border/70 bg-white/92 shadow-[0_24px_80px_-40px_rgba(185,92,0,0.2)]">
+            <CardHeader className="gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex size-11 items-center justify-center rounded-2xl bg-red-50 text-red-600">
+                  <Activity className="size-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-2xl">错误告警摘要</CardTitle>
+                  <CardDescription className="leading-6">
+                    汇总当前绑定下的失败执行次数、失败帖子数量，并聚合最近的失败记录。
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl bg-red-50 px-4 py-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-red-600">失败执行次数</p>
+                  <p className="mt-2 text-2xl font-semibold text-foreground">
+                    {summary.errorSummary.failedRunCount}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-[#fcfaf5] px-4 py-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                    失败帖子数量
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold text-foreground">
+                    {summary.errorSummary.failedPostCount}
+                  </p>
+                </div>
+              </div>
+
+              {summary.errorSummary.recentFailures.length > 0 ? (
+                <div className="space-y-3">
+                  {summary.errorSummary.recentFailures.map((item) => (
+                    <div
+                      key={item.id}
+                      className="rounded-3xl border border-border/70 bg-[#fcfaf5] px-4 py-4"
+                    >
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Badge className={`rounded-full ${getRunStatusClassName(item.status)}`}>
+                          {item.status}
+                        </Badge>
+                        <Badge className="rounded-full bg-[#f5efe4] text-[#7f5a26]">
+                          {item.triggerType}
+                        </Badge>
+                        <span className="text-sm text-muted-foreground">
+                          失败帖子 {item.failedCount}
+                        </span>
+                      </div>
+                      <p className="mt-3 text-sm leading-6 text-foreground">
+                        {item.errorMessage ?? "没有记录错误摘要。"}
+                      </p>
+                      <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                        <span>创建于 {formatDateTime(item.createdAt)}</span>
+                        <span>结束于 {formatDateTime(item.finishedAt)}</span>
+                      </div>
+                      <Link
+                        href={`/runs/${item.id}`}
+                        className="mt-4 inline-flex h-8 items-center justify-center rounded-full border border-border bg-white px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                      >
+                        查看失败详情
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-3xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-700">
+                  <p className="font-medium">最近没有失败告警</p>
+                  <p className="mt-2 leading-6">
+                    当前绑定下的抓取运行没有失败记录，告警聚合会在出现失败后自动累积。
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </>
       ) : null}
     </div>
