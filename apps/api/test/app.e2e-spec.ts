@@ -231,6 +231,109 @@ describe('AppController (e2e)', () => {
       });
   });
 
+  it('/archives supports keyword, postType and date range filters', async () => {
+    const ownBindingResponse = await request(app.getHttpServer())
+      .post('/bindings')
+      .set(internalHeaders)
+      .send({
+        xUserId: 'x-user-archives-filter',
+        username: 'archives_filter_owner',
+        displayName: 'Archives Filter Owner',
+        credentialSource: 'WEB_LOGIN',
+        credentialPayload: '{"cookie":"archives-filter"}',
+        crawlEnabled: false,
+        crawlIntervalMinutes: 30,
+      })
+      .expect(201);
+
+    const otherBindingResponse = await request(app.getHttpServer())
+      .post('/bindings')
+      .set(otherInternalHeaders)
+      .send({
+        xUserId: 'x-user-archives-filter-other',
+        username: 'archives_filter_other',
+        displayName: 'Archives Filter Other',
+        credentialSource: 'WEB_LOGIN',
+        credentialPayload: '{"cookie":"archives-filter-other"}',
+        crawlEnabled: false,
+        crawlIntervalMinutes: 45,
+      })
+      .expect(201);
+
+    const ownBinding = ownBindingResponse.body as { id: string };
+    const otherBinding = otherBindingResponse.body as { id: string };
+
+    await prisma.archivedPost.create({
+      data: {
+        bindingId: ownBinding.id,
+        xPostId: 'archives-filter-match',
+        postUrl:
+          'https://x.com/archives_filter_owner/status/archives-filter-match',
+        postType: 'QUOTE',
+        authorUsername: 'archives_filter_owner',
+        authorDisplayName: 'AI Curator',
+        rawText: 'AI trend digest worth saving',
+        richTextJson: { version: 1, blocks: [] },
+        renderedHtml: '<p>AI trend digest worth saving</p>',
+        rawPayloadJson: { id: 'archives-filter-match' },
+        sourceCreatedAt: new Date('2026-03-19T09:00:00.000Z'),
+      },
+    });
+    await prisma.archivedPost.create({
+      data: {
+        bindingId: ownBinding.id,
+        xPostId: 'archives-filter-type-miss',
+        postUrl:
+          'https://x.com/archives_filter_owner/status/archives-filter-type-miss',
+        postType: 'POST',
+        authorUsername: 'archives_filter_owner',
+        rawText: 'AI trend but wrong type',
+        richTextJson: { version: 1, blocks: [] },
+        renderedHtml: '<p>AI trend but wrong type</p>',
+        rawPayloadJson: { id: 'archives-filter-type-miss' },
+        sourceCreatedAt: new Date('2026-03-19T10:00:00.000Z'),
+      },
+    });
+    await prisma.archivedPost.create({
+      data: {
+        bindingId: otherBinding.id,
+        xPostId: 'archives-filter-user-miss',
+        postUrl:
+          'https://x.com/archives_filter_other/status/archives-filter-user-miss',
+        postType: 'QUOTE',
+        authorUsername: 'archives_filter_other',
+        rawText: 'AI trend from another user',
+        richTextJson: { version: 1, blocks: [] },
+        renderedHtml: '<p>AI trend from another user</p>',
+        rawPayloadJson: { id: 'archives-filter-user-miss' },
+        sourceCreatedAt: new Date('2026-03-19T09:30:00.000Z'),
+      },
+    });
+
+    await request(app.getHttpServer())
+      .get(
+        '/archives?page=1&pageSize=10&keyword=trend&postType=QUOTE&dateFrom=2026-03-19&dateTo=2026-03-19',
+      )
+      .set(internalHeaders)
+      .expect(200)
+      .expect(({ body }) => {
+        const payload = body as {
+          items: Array<{
+            binding: { userId: string };
+            postType: string;
+            xPostId: string;
+          }>;
+          total: number;
+        };
+
+        expect(payload.total).toBe(1);
+        expect(payload.items).toHaveLength(1);
+        expect(payload.items[0]?.xPostId).toBe('archives-filter-match');
+        expect(payload.items[0]?.postType).toBe('QUOTE');
+        expect(payload.items[0]?.binding.userId).toBe('user_demo');
+      });
+  });
+
   it('/archives/:id returns archive detail with user isolation', async () => {
     const ownBindingResponse = await request(app.getHttpServer())
       .post('/bindings')

@@ -1,11 +1,15 @@
 import {
+  type PostType,
   Prisma,
   type ArchiveStatus,
   type MediaType,
-  type PostType,
   type RelationType,
 } from '@prisma/client';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 type CreateArchivedPostMediaInput = {
@@ -54,8 +58,12 @@ export type CreateArchivedPostInput = {
 };
 
 type ListArchivedPostsOptions = {
+  dateFrom?: string;
+  dateTo?: string;
+  keyword?: string;
   page?: number;
   pageSize?: number;
+  postType?: PostType;
 };
 
 const archivedPostDetailArgs = {
@@ -236,9 +244,16 @@ export class ArchivesService {
     const page = options.page ?? 1;
     const pageSize = options.pageSize ?? 20;
     const skip = (page - 1) * pageSize;
+    const where = this.buildArchivedPostWhere({
+      bindingId,
+      dateFrom: options.dateFrom,
+      dateTo: options.dateTo,
+      keyword: options.keyword,
+      postType: options.postType,
+    });
     const [items, total] = await this.prisma.$transaction([
       this.prisma.archivedPost.findMany({
-        where: { bindingId },
+        where,
         include: {
           mediaItems: {
             orderBy: {
@@ -254,7 +269,7 @@ export class ArchivesService {
         take: pageSize,
       }),
       this.prisma.archivedPost.count({
-        where: { bindingId },
+        where,
       }),
     ]);
 
@@ -273,13 +288,16 @@ export class ArchivesService {
     const page = options.page ?? 1;
     const pageSize = options.pageSize ?? 20;
     const skip = (page - 1) * pageSize;
+    const where = this.buildArchivedPostWhere({
+      userId,
+      dateFrom: options.dateFrom,
+      dateTo: options.dateTo,
+      keyword: options.keyword,
+      postType: options.postType,
+    });
     const [items, total] = await this.prisma.$transaction([
       this.prisma.archivedPost.findMany({
-        where: {
-          binding: {
-            userId,
-          },
-        },
+        where,
         include: {
           binding: true,
           mediaItems: {
@@ -295,11 +313,7 @@ export class ArchivesService {
         take: pageSize,
       }),
       this.prisma.archivedPost.count({
-        where: {
-          binding: {
-            userId,
-          },
-        },
+        where,
       }),
     ]);
 
@@ -317,5 +331,111 @@ export class ArchivesService {
     }
 
     return typeof value === 'string' ? BigInt(value) : value;
+  }
+
+  private buildArchivedPostWhere(input: {
+    bindingId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    keyword?: string;
+    postType?: PostType;
+    userId?: string;
+  }): Prisma.ArchivedPostWhereInput {
+    const where: Prisma.ArchivedPostWhereInput = {};
+
+    if (input.bindingId) {
+      where.bindingId = input.bindingId;
+    }
+
+    if (input.userId) {
+      where.binding = {
+        userId: input.userId,
+      };
+    }
+
+    if (input.postType) {
+      where.postType = input.postType;
+    }
+
+    const sourceCreatedAt = this.buildSourceCreatedAtFilter(
+      input.dateFrom,
+      input.dateTo,
+    );
+
+    if (sourceCreatedAt) {
+      where.sourceCreatedAt = sourceCreatedAt;
+    }
+
+    if (input.keyword) {
+      where.OR = [
+        {
+          rawText: {
+            contains: input.keyword,
+            mode: 'insensitive',
+          },
+        },
+        {
+          authorUsername: {
+            contains: input.keyword,
+            mode: 'insensitive',
+          },
+        },
+        {
+          authorDisplayName: {
+            contains: input.keyword,
+            mode: 'insensitive',
+          },
+        },
+        {
+          xPostId: {
+            contains: input.keyword,
+            mode: 'insensitive',
+          },
+        },
+        {
+          binding: {
+            username: {
+              contains: input.keyword,
+              mode: 'insensitive',
+            },
+          },
+        },
+      ];
+    }
+
+    return where;
+  }
+
+  private buildSourceCreatedAtFilter(dateFrom?: string, dateTo?: string) {
+    if (!dateFrom && !dateTo) {
+      return undefined;
+    }
+
+    const gte = dateFrom
+      ? this.parseArchiveFilterDate(dateFrom, 'start')
+      : undefined;
+    const lte = dateTo ? this.parseArchiveFilterDate(dateTo, 'end') : undefined;
+
+    if (gte && lte && gte > lte) {
+      throw new BadRequestException('Archive dateFrom cannot be after dateTo');
+    }
+
+    return {
+      gte,
+      lte,
+    };
+  }
+
+  private parseArchiveFilterDate(value: string, boundary: 'start' | 'end') {
+    const normalizedValue = /^\d{4}-\d{2}-\d{2}$/.test(value)
+      ? `${value}${boundary === 'start' ? 'T00:00:00.000Z' : 'T23:59:59.999Z'}`
+      : value;
+    const parsedDate = new Date(normalizedValue);
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      throw new BadRequestException(`Invalid archive date filter: ${value}`);
+    }
+
+    return parsedDate;
   }
 }

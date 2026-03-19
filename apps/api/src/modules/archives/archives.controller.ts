@@ -3,7 +3,20 @@ import { InternalAuthGuard } from '../../common/auth/internal-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { RequestUser } from '../../common/auth/request-user.type';
 import { serializeForJson } from '../../common/utils/json-serializer';
+import { ListArchivesQueryDto } from './dto/list-archives-query.dto';
 import { ArchivesService } from './archives.service';
+
+function normalizeOptionalQueryNumber(value: number | string | undefined) {
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return Number(value);
+  }
+
+  return undefined;
+}
 
 @Controller('archives')
 @UseGuards(InternalAuthGuard)
@@ -13,13 +26,16 @@ export class ArchivesController {
   @Get()
   listArchives(
     @CurrentUser() user: RequestUser,
-    @Query('page') page?: string,
-    @Query('pageSize') pageSize?: string,
+    @Query() query: ListArchivesQueryDto,
   ) {
     return this.archivesService
       .listArchivedPostsByUser(user.id, {
-        page: page ? Number(page) : undefined,
-        pageSize: pageSize ? Number(pageSize) : undefined,
+        page: normalizeOptionalQueryNumber(query.page),
+        pageSize: normalizeOptionalQueryNumber(query.pageSize),
+        keyword: query.keyword,
+        postType: query.postType,
+        dateFrom: query.dateFrom,
+        dateTo: query.dateTo,
       })
       .then((payload) => serializeForJson(payload));
   }

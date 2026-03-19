@@ -208,6 +208,66 @@ describe('ArchivesService', () => {
     });
   });
 
+  it('filters archived posts by user with keyword, post type and source date range', async () => {
+    const binding = await createBinding('archive_search');
+    const otherBinding = await createBinding('archive_search_alt');
+
+    await archivesService.createArchivedPost({
+      bindingId: binding.id,
+      xPostId: 'post-filter-keep',
+      postUrl: 'https://x.com/archive_search/status/post-filter-keep',
+      postType: PostType.QUOTE,
+      author: {
+        username: 'archive_search',
+        displayName: 'AI Curator',
+      },
+      rawText: 'AI trend digest for builders',
+      richTextJson: { version: 1, blocks: [] },
+      rawPayloadJson: { id: 'post-filter-keep' },
+      sourceCreatedAt: '2026-03-19T09:00:00.000Z',
+    });
+    await archivesService.createArchivedPost({
+      bindingId: binding.id,
+      xPostId: 'post-filter-skip-type',
+      postUrl: 'https://x.com/archive_search/status/post-filter-skip-type',
+      postType: PostType.POST,
+      author: {
+        username: 'archive_search',
+      },
+      rawText: 'AI trend but not a quote',
+      richTextJson: { version: 1, blocks: [] },
+      rawPayloadJson: { id: 'post-filter-skip-type' },
+      sourceCreatedAt: '2026-03-19T09:30:00.000Z',
+    });
+    await archivesService.createArchivedPost({
+      bindingId: otherBinding.id,
+      xPostId: 'post-filter-skip-date',
+      postUrl: 'https://x.com/archive_search_alt/status/post-filter-skip-date',
+      postType: PostType.QUOTE,
+      author: {
+        username: 'archive_search_alt',
+      },
+      rawText: 'AI trend from another day',
+      richTextJson: { version: 1, blocks: [] },
+      rawPayloadJson: { id: 'post-filter-skip-date' },
+      sourceCreatedAt: '2026-03-21T09:00:00.000Z',
+    });
+
+    const result = await archivesService.listArchivedPostsByUser(
+      'archive_owner',
+      {
+        keyword: 'trend',
+        postType: PostType.QUOTE,
+        dateFrom: '2026-03-19',
+        dateTo: '2026-03-19',
+      },
+    );
+
+    expect(result.total).toBe(1);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.xPostId).toBe('post-filter-keep');
+  });
+
   it('falls back to the existing archive when concurrent writes hit the unique constraint', async () => {
     const binding = await createBinding('archive_conflict');
     const input = {
