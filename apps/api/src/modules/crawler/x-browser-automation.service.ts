@@ -45,6 +45,10 @@ const CDP_CONNECT_TIMEOUT_MS = 15000;
 const DEFAULT_SYSTEM_CHROME_PATHS = [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/Applications/Chromium.app/Contents/MacOS/Chromium',
+  '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/chromium',
+  '/usr/bin/chromium-browser',
 ] as const;
 type ScrapedRawFeedPost = RawFeedResponse['posts'][number];
 
@@ -53,7 +57,8 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
   constructor(private readonly configService: ConfigService) {}
 
   async launchInteractiveLogin(loginUrl = LOGIN_URL) {
-    const systemChromeExecutablePath = this.resolveSystemChromeExecutablePath();
+    const systemChromeExecutablePath =
+      this.resolveInteractiveLoginExecutablePath();
 
     if (systemChromeExecutablePath) {
       return this.launchInteractiveLoginWithSystemChrome(
@@ -85,58 +90,83 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
     runtime: InteractiveLoginRuntime,
     loginUrl: string,
   ): Promise<InteractiveLoginState> {
-    if (runtime.page.isClosed()) {
-      return {
-        status: 'CLOSED',
-      };
-    }
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const page = this.resolveInteractiveLoginPage(runtime);
 
-    try {
-      const cookies = await runtime.context.cookies();
-      const authToken = cookies.find((item) => item.name === 'auth_token');
-
-      if (!authToken) {
+      if (!page) {
         return {
-          status: 'WAITING_LOGIN',
+          status: 'CLOSED',
         };
       }
 
-      const pageUrl = runtime.page.url();
+      try {
+        const cookies = await runtime.context.cookies();
+        const authToken = cookies.find((item) => item.name === 'auth_token');
 
-      if (this.isLoginUrl(pageUrl)) {
+        if (!authToken) {
+          return {
+            status: 'WAITING_LOGIN',
+          };
+        }
+
+        const pageUrl = page.url();
+
+        if (this.isLoginUrl(pageUrl)) {
+          return {
+            status: 'WAITING_LOGIN',
+          };
+        }
+
+        await this.navigateToAuthenticatedHome(page);
+
+        const authenticatedPage = this.resolveInteractiveLoginPage(runtime);
+
+        if (!authenticatedPage) {
+          return {
+            status: 'CLOSED',
+          };
+        }
+
+        await this.ensureAuthenticatedShell(authenticatedPage);
+
+        const payload = await this.buildCredentialPayload(
+          runtime.context,
+          authenticatedPage,
+          loginUrl,
+        );
+
         return {
-          status: 'WAITING_LOGIN',
+          status: 'AUTHENTICATED',
+          payload,
+          profile: {
+            xUserId: payload.xUserId,
+            username: payload.username,
+            displayName: payload.displayName,
+            avatarUrl: payload.avatarUrl,
+          },
+        };
+      } catch (error) {
+        if (this.isTargetClosedError(error)) {
+          continue;
+        }
+
+        return {
+          status: 'FAILED',
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : 'Browser binding inspection failed',
         };
       }
-
-      await this.navigateToAuthenticatedHome(runtime.page);
-      await this.ensureAuthenticatedShell(runtime.page);
-
-      const payload = await this.buildCredentialPayload(
-        runtime.context,
-        runtime.page,
-        loginUrl,
-      );
-
-      return {
-        status: 'AUTHENTICATED',
-        payload,
-        profile: {
-          xUserId: payload.xUserId,
-          username: payload.username,
-          displayName: payload.displayName,
-          avatarUrl: payload.avatarUrl,
-        },
-      };
-    } catch (error) {
-      return {
-        status: 'FAILED',
-        errorMessage:
-          error instanceof Error
-            ? error.message
-            : 'Browser binding inspection failed',
-      };
     }
+
+    return this.browserStillOpen(runtime)
+      ? {
+          status: 'WAITING_LOGIN',
+        }
+      : {
+          status: 'CLOSED',
+        };
   }
 
   async closeInteractiveLoginRuntime(runtime: InteractiveLoginRuntime) {
@@ -277,6 +307,12 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
         '--no-first-run',
         '--no-default-browser-check',
         '--disable-default-apps',
+        '--disable-blink-features=AutomationControlled',
+        '--disable-features=IsolateOrigins,site-per-process',
+        '--disable-dev-shm-usage',
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--lang=en-US,en',
         '--window-size=1440,1024',
         'about:blank',
       ],
@@ -328,8 +364,11 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
     const configuredExecutablePath = this.configService.get<string>(
       'X_BROWSER_EXECUTABLE_PATH',
     );
+    const autoDetectedExecutablePath = configuredExecutablePath
+      ? undefined
+      : this.resolveSystemChromeExecutablePath();
     const executablePath =
-      configuredExecutablePath || this.resolveSystemChromeExecutablePath();
+      configuredExecutablePath || autoDetectedExecutablePath;
     const channel = this.configService.get<string>('X_BROWSER_CHANNEL');
 
     try {
@@ -339,7 +378,11 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
         channel: executablePath ? undefined : channel || undefined,
       });
     } catch (error) {
-      if (executablePath || channel) {
+      if (configuredExecutablePath || channel) {
+        throw error;
+      }
+
+      if (autoDetectedExecutablePath) {
         return chromium.launch({ headless });
       }
 
@@ -353,6 +396,12 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
     );
 
     if (configuredPath) {
+      if (!existsSync(configuredPath)) {
+        throw new Error(
+          `Configured X_BROWSER_EXECUTABLE_PATH does not exist: ${configuredPath}`,
+        );
+      }
+
       return configuredPath;
     }
 
@@ -360,6 +409,25 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
       if (existsSync(candidate)) {
         return candidate;
       }
+    }
+
+    return undefined;
+  }
+
+  private resolveInteractiveLoginExecutablePath() {
+    const configuredPath = this.resolveSystemChromeExecutablePath();
+
+    if (configuredPath) {
+      return configuredPath;
+    }
+
+    const bundledChromiumExecutablePath = chromium.executablePath();
+
+    if (
+      bundledChromiumExecutablePath &&
+      existsSync(bundledChromiumExecutablePath)
+    ) {
+      return bundledChromiumExecutablePath;
     }
 
     return undefined;
@@ -436,6 +504,88 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
     }
 
     throw new Error('Timed out while waiting for system Chrome page');
+  }
+
+  private browserStillOpen(runtime: InteractiveLoginRuntime) {
+    return (
+      runtime.browser.isConnected() &&
+      this.listInteractiveLoginPages(runtime).length > 0
+    );
+  }
+
+  private listInteractiveLoginPages(runtime: InteractiveLoginRuntime) {
+    if (!runtime.browser.isConnected()) {
+      return [] as Page[];
+    }
+
+    return runtime.context.pages().filter((page) => !page.isClosed());
+  }
+
+  private resolveInteractiveLoginPage(runtime: InteractiveLoginRuntime) {
+    const pages = this.listInteractiveLoginPages(runtime);
+
+    if (pages.length === 0) {
+      return null;
+    }
+
+    const currentPage =
+      runtime.page && !runtime.page.isClosed() ? runtime.page : null;
+    const candidates = currentPage
+      ? [currentPage, ...pages.filter((page) => page !== currentPage)]
+      : pages;
+    const preferredPage = candidates.reduce((best, candidate) => {
+      if (!best) {
+        return candidate;
+      }
+
+      return this.scoreInteractiveLoginPage(candidate) >=
+        this.scoreInteractiveLoginPage(best)
+        ? candidate
+        : best;
+    }, null as Page | null);
+
+    if (!preferredPage) {
+      return null;
+    }
+
+    runtime.page = preferredPage;
+    return preferredPage;
+  }
+
+  private scoreInteractiveLoginPage(page: Page) {
+    const url = page.url();
+
+    if (url.startsWith(HOME_URL)) {
+      return 5;
+    }
+
+    if (url.includes('x.com') || url.includes('twitter.com')) {
+      return 4;
+    }
+
+    if (url.includes('accounts.google.com')) {
+      return 3;
+    }
+
+    if (url && url !== 'about:blank') {
+      return 2;
+    }
+
+    return 1;
+  }
+
+  private isTargetClosedError(error: unknown) {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    return (
+      error.message.includes(
+        'Target page, context or browser has been closed',
+      ) ||
+      error.message.includes('Target closed') ||
+      error.message.includes('Browser has been closed')
+    );
   }
 
   private async terminateChromeProcess(chromeProcess: ChildProcess) {

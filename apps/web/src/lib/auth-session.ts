@@ -3,7 +3,7 @@ import "server-only";
 import { randomUUID } from "crypto";
 import { cookies } from "next/headers";
 import { PrismaAdapter } from "@auth/prisma-adapter";
-import { getAppBaseUrl } from "@/lib/app-url";
+import { shouldUseSecureSessionCookie } from "@/lib/app-url";
 import { prisma } from "@/lib/prisma";
 
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
@@ -11,9 +11,7 @@ const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 export const authAdapter = PrismaAdapter(prisma);
 
 export function getSessionCookieName() {
-  const isSecure =
-    getAppBaseUrl()?.startsWith("https://") ||
-    process.env.AUTH_TRUST_HOST === "true";
+  const isSecure = shouldUseSecureSessionCookie();
 
   return isSecure ? "__Secure-authjs.session-token" : "authjs.session-token";
 }

@@ -6,6 +6,17 @@ jest.mock("@/lib/api-client", () => ({
   apiRequest: jest.fn(),
 }));
 
+jest.mock("@/lib/request-locale", () => {
+  const { getMessages } = jest.requireActual("@/lib/i18n");
+
+  return {
+    getRequestMessages: jest.fn(async () => ({
+      locale: "zh-CN",
+      messages: getMessages("zh-CN"),
+    })),
+  };
+});
+
 jest.mock("./binding-console", () => ({
   BindingConsole: ({
     currentBinding,
@@ -51,7 +62,7 @@ describe("BindingsPage", () => {
       path: "/bindings/current",
       method: "GET",
     });
-    expect(screen.getByRole("heading", { name: "Bindings" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "绑定" })).toBeInTheDocument();
     expect(screen.getByTestId("binding-console")).toHaveTextContent(
       "browser_owner:ACTIVE",
     );

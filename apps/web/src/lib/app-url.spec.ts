@@ -1,4 +1,8 @@
-import { getAppBaseUrl, normalizeAppUrl } from "@/lib/app-url";
+import {
+  getAppBaseUrl,
+  normalizeAppUrl,
+  shouldUseSecureSessionCookie,
+} from "@/lib/app-url";
 
 const originalEnv = process.env;
 
@@ -46,5 +50,18 @@ describe("app-url", () => {
     process.env.VERCEL_PROJECT_PRODUCTION_URL = "auto-x-to-wechat.vercel.app";
 
     expect(getAppBaseUrl()).toBe("https://auto-x-to-wechat.vercel.app");
+  });
+
+  it("does not force secure cookies for local http deployments", () => {
+    process.env.NEXTAUTH_URL = "http://localhost:3000";
+    process.env.AUTH_TRUST_HOST = "true";
+
+    expect(shouldUseSecureSessionCookie()).toBe(false);
+  });
+
+  it("uses secure cookies for https deployments", () => {
+    process.env.NEXTAUTH_URL = "https://auto-x-to-wechat.vercel.app";
+
+    expect(shouldUseSecureSessionCookie()).toBe(true);
   });
 });

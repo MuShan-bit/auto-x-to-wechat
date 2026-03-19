@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/app-shell";
+import { getRequestMessages } from "@/lib/request-locale";
+import { getRequestTheme } from "@/lib/request-theme";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,22 +15,36 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "auto-x-to-wechat",
-  description: "X 推荐内容抓取、归档与任务平台",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { messages } = await getRequestMessages();
 
-export default function RootLayout({
+  return {
+    title: "auto-x-to-wechat",
+    description: messages.metadata.description,
+  };
+}
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const { locale } = await getRequestMessages();
+  const theme = await getRequestTheme();
+
   return (
-    <html lang="zh-CN">
+    <html
+      lang={locale}
+      className={theme === "dark" ? "dark" : ""}
+      style={{ colorScheme: theme }}
+      suppressHydrationWarning
+    >
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AppShell>{children}</AppShell>
+        <AppShell locale={locale} theme={theme}>
+          {children}
+        </AppShell>
       </body>
     </html>
   );

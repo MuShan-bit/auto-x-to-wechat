@@ -17,15 +17,10 @@ services:
       - "${DOCKER_DB_PORT:-55432}:5432"
 
   api:
+    platform: ${DOCKER_API_PLATFORM:-linux/amd64}
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    command:
-      [
-        "sh",
-        "-c",
-        "pnpm db:migrate:deploy && pnpm --filter api start:prod",
-      ]
     restart: unless-stopped
     depends_on:
       db:
@@ -39,8 +34,13 @@ services:
       CRAWLER_ADAPTER_NAME: mock
       X_BINDING_SESSION_TIMEOUT_SECONDS: 600
       REAL_CRAWLER_MAX_POSTS: 20
+      ENABLE_X_BROWSER_REMOTE_DESKTOP: "1"
+      X_BROWSER_REMOTE_DESKTOP_PORT: 6080
+      X_BROWSER_VNC_PORT: 5900
+      X_BROWSER_EXECUTABLE_PATH: /usr/bin/google-chrome-stable
     ports:
       - "${DOCKER_API_PORT:-3001}:3001"
+      - "${DOCKER_BROWSER_DESKTOP_PORT:-6080}:6080"
     healthcheck:
       test:
         [
@@ -73,6 +73,7 @@ services:
       INTERNAL_API_BASE_URL: http://api:3001
       INTERNAL_API_SHARED_SECRET: replace-with-an-internal-shared-secret
       DATABASE_URL: postgresql://postgres:postgres@db:5432/auto_x_to_wechat?schema=public
+      X_BROWSER_REMOTE_DESKTOP_URL: http://localhost:${DOCKER_BROWSER_DESKTOP_PORT:-6080}/vnc.html?autoconnect=1&resize=scale&reconnect=1
     ports:
       - "${DOCKER_WEB_PORT:-3000}:3000"
 

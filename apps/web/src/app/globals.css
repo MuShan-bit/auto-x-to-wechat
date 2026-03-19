@@ -121,9 +121,91 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground transition-colors duration-200;
   }
   html {
     @apply font-sans;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+}
+
+@layer components {
+  .dark .bg-white\/75,
+  .dark .bg-white\/78,
+  .dark .bg-white\/80,
+  .dark .bg-white\/82,
+  .dark .bg-white\/85,
+  .dark .bg-white\/90,
+  .dark .bg-white\/92,
+  .dark .bg-white\/95 {
+    background-color: oklch(0.24 0.012 80 / 0.92);
+  }
+
+  .dark .bg-\[\#fcfaf5\] {
+    background-color: oklch(0.26 0.012 75 / 0.96);
+  }
+
+  .dark .bg-\[\#f5efe4\],
+  .dark .bg-\[\#efe6d7\],
+  .dark .bg-\[\#f4ebdb\] {
+    background-color: oklch(0.29 0.03 72 / 0.94);
+  }
+
+  .dark .bg-\[\#eef4f0\],
+  .dark .bg-\[\#f8faf8\] {
+    background-color: oklch(0.28 0.02 160 / 0.94);
+  }
+
+  .dark .bg-red-50 {
+    background-color: oklch(0.28 0.06 25 / 0.92);
+  }
+
+  .dark .bg-amber-50 {
+    background-color: oklch(0.3 0.06 60 / 0.92);
+  }
+
+  .dark .bg-emerald-50 {
+    background-color: oklch(0.28 0.05 155 / 0.92);
+  }
+
+  .dark .bg-rose-50 {
+    background-color: oklch(0.28 0.05 18 / 0.92);
+  }
+
+  .dark .bg-slate-100 {
+    background-color: oklch(0.27 0.01 255 / 0.9);
+  }
+
+  .dark .text-\[\#7f5a26\] {
+    color: oklch(0.82 0.09 70);
+  }
+
+  .dark .text-\[\#2d4d3f\] {
+    color: oklch(0.84 0.05 162);
+  }
+
+  .dark .text-\[\#b95c00\],
+  .dark .text-\[\#8b4a00\],
+  .dark .text-amber-800,
+  .dark .text-red-600,
+  .dark .text-rose-600,
+  .dark .text-emerald-700,
+  .dark .text-slate-700 {
+    color: oklch(0.84 0.08 55);
+  }
+
+  .dark .border-red-200,
+  .dark .border-red-200\/80 {
+    border-color: oklch(0.5 0.09 25 / 0.45);
+  }
+
+  .dark .border-amber-200 {
+    border-color: oklch(0.55 0.09 60 / 0.45);
+  }
+
+  .dark .border-emerald-200 {
+    border-color: oklch(0.5 0.06 155 / 0.45);
   }
 }

@@ -34,3 +34,7 @@ export function getAppBaseUrl() {
     process.env.VERCEL_BRANCH_URL ?? process.env.VERCEL_URL,
   );
 }
+
+export function shouldUseSecureSessionCookie(appBaseUrl = getAppBaseUrl()) {
+  return appBaseUrl?.startsWith("https://") ?? false;
+}

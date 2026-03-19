@@ -2,9 +2,10 @@
 
 import { compare } from "bcryptjs";
 import { redirect } from "next/navigation";
-import { signInSchema } from "@/lib/auth-schema";
 import { getAppBaseUrl } from "@/lib/app-url";
+import { createSignInSchema } from "@/lib/auth-schema";
 import { createDatabaseSession, persistCredentialsAccount } from "@/lib/auth-session";
+import { getRequestMessages } from "@/lib/request-locale";
 import { prisma } from "@/lib/prisma";
 
 export type LoginFormState = {
@@ -39,16 +40,18 @@ export async function loginAction(
   _previousState: LoginFormState,
   formData: FormData,
 ) {
+  const { locale, messages } = await getRequestMessages();
   const rawData = {
     email: formData.get("email"),
     password: formData.get("password"),
   };
 
+  const signInSchema = createSignInSchema(locale);
   const parsed = signInSchema.safeParse(rawData);
 
   if (!parsed.success) {
     return {
-      error: parsed.error.issues[0]?.message ?? "登录信息格式不正确",
+      error: parsed.error.issues[0]?.message ?? messages.actions.login.invalidInput,
     } satisfies LoginFormState;
   }
 
@@ -59,7 +62,7 @@ export async function loginAction(
 
   if (!user?.passwordHash) {
     return {
-      error: "邮箱或密码错误，请检查后重试。",
+      error: messages.actions.login.invalidCredentials,
     } satisfies LoginFormState;
   }
 
@@ -67,7 +70,7 @@ export async function loginAction(
 
   if (!isPasswordValid) {
     return {
-      error: "邮箱或密码错误，请检查后重试。",
+      error: messages.actions.login.invalidCredentials,
     } satisfies LoginFormState;
   }
 
@@ -77,12 +80,12 @@ export async function loginAction(
   } catch (error) {
     if (error instanceof Error) {
       return {
-        error: error.message || "登录失败，请稍后重试。",
+        error: error.message || messages.actions.login.failed,
       } satisfies LoginFormState;
     }
 
     return {
-      error: "登录失败，请稍后重试。",
+      error: messages.actions.login.failed,
     } satisfies LoginFormState;
   }
 

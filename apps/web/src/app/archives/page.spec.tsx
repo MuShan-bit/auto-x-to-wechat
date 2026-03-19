@@ -9,6 +9,17 @@ jest.mock("@/lib/api-client", () => ({
   ),
 }));
 
+jest.mock("@/lib/request-locale", () => {
+  const { getMessages } = jest.requireActual("@/lib/i18n");
+
+  return {
+    getRequestMessages: jest.fn(async () => ({
+      locale: "zh-CN",
+      messages: getMessages("zh-CN"),
+    })),
+  };
+});
+
 describe("ArchivesPage", () => {
   it("loads filtered archives and renders cards with pagination", async () => {
     const apiRequestMock = jest.mocked(apiRequest);
@@ -59,11 +70,11 @@ describe("ArchivesPage", () => {
       path: "/archives?page=2&pageSize=6&keyword=openai&postType=QUOTE&dateFrom=2026-03-01&dateTo=2026-03-19",
       method: "GET",
     });
-    expect(screen.getByRole("heading", { name: "Archives" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "归档" })).toBeInTheDocument();
     expect(screen.getByText("筛选归档")).toBeInTheDocument();
     expect(screen.getByDisplayValue("openai")).toBeInTheDocument();
     expect(screen.getByText("关键词：openai")).toBeInTheDocument();
-    expect(screen.getByText("类型：QUOTE")).toBeInTheDocument();
+    expect(screen.getByText("类型：引用")).toBeInTheDocument();
     expect(screen.getByText("@openai_news", { exact: false })).toBeInTheDocument();
     expect(
       screen.getByText(/来源绑定账号：@browser_owner/),

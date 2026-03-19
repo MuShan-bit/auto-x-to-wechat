@@ -5,6 +5,7 @@ import {
 import {
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
   OnModuleDestroy,
 } from '@nestjs/common';
@@ -19,7 +20,9 @@ const X_LOGIN_URL = 'https://x.com/i/flow/login';
 
 @Injectable()
 export class BindingBrowserSessionsService implements OnModuleDestroy {
+  private readonly logger = new Logger(BindingBrowserSessionsService.name);
   private readonly runtimes = new Map<string, InteractiveLoginRuntime>();
+  private readonly sessionSyncOperations = new Map<string, Promise<unknown>>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -69,6 +72,8 @@ export class BindingBrowserSessionsService implements OnModuleDestroy {
         },
       });
     } catch (error) {
+      const errorMessage = this.getInteractiveLoginErrorMessage(error);
+
       await this.prisma.bindingBrowserSession.update({
         where: {
           id: session.id,
@@ -76,17 +81,14 @@ export class BindingBrowserSessionsService implements OnModuleDestroy {
         data: {
           status: BindingBrowserSessionStatus.FAILED,
           completedAt: new Date(),
-          errorMessage:
-            error instanceof Error
-              ? error.message
-              : 'Failed to launch X browser binding session',
+          errorMessage,
         },
       });
 
+      this.logger.error(errorMessage, error instanceof Error ? error.stack : undefined);
+
       throw new InternalServerErrorException(
-        error instanceof Error
-          ? error.message
-          : 'Failed to launch X browser binding session',
+        errorMessage,
       );
     }
   }
@@ -135,6 +137,22 @@ export class BindingBrowserSessionsService implements OnModuleDestroy {
   }
 
   private async syncSession(session: BindingBrowserSession) {
+    const inFlightOperation = this.sessionSyncOperations.get(session.id);
+
+    if (inFlightOperation) {
+      return inFlightOperation;
+    }
+
+    const operation = this.syncSessionInternal(session).finally(() => {
+      this.sessionSyncOperations.delete(session.id);
+    });
+
+    this.sessionSyncOperations.set(session.id, operation);
+
+    return operation;
+  }
+
+  private async syncSessionInternal(session: BindingBrowserSession) {
     if (this.isFinalStatus(session.status)) {
       return this.prisma.bindingBrowserSession.findUniqueOrThrow({
         where: {
@@ -368,5 +386,22 @@ export class BindingBrowserSessionsService implements OnModuleDestroy {
       status === BindingBrowserSessionStatus.EXPIRED ||
       status === BindingBrowserSessionStatus.CANCELLED
     );
+  }
+
+  private getInteractiveLoginErrorMessage(error: unknown) {
+    const fallback = 'Failed to launch X browser binding session';
+
+    if (!(error instanceof Error) || !error.message) {
+      return fallback;
+    }
+
+    if (
+      error.message.includes('without having a XServer running') ||
+      error.message.includes('Missing X server or $DISPLAY')
+    ) {
+      return 'Interactive X login requires a desktop display. For Docker deployments, enable the built-in remote desktop and reopen the browser binding flow.';
+    }
+
+    return error.message;
   }
 }

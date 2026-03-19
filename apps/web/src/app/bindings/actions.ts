@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { formatMessage } from "@/lib/i18n";
 import { ApiRequestError, apiRequest, getApiErrorMessage } from "@/lib/api-client";
+import { getRequestMessages } from "@/lib/request-locale";
 
 export type BindingActionState = {
   actionHref?: string;
@@ -25,46 +27,64 @@ type UnbindBindingResponse = {
 
 const credentialSourceSchema = z.enum(["WEB_LOGIN", "COOKIE_IMPORT", "EXTENSION"]);
 
-const bindingSchema = z.object({
-  xUserId: z.string().trim().min(1, "请填写 X 用户 ID"),
-  username: z.string().trim().min(1, "请填写 X 用户名"),
-  displayName: z.string().trim().optional(),
-  avatarUrl: z
-    .union([z.string().trim().url("头像地址必须是有效 URL"), z.literal("")])
-    .optional()
-    .transform((value) => value || undefined),
-  credentialSource: credentialSourceSchema,
-  credentialPayload: z.string().trim().min(1, "请粘贴抓取凭证"),
-  crawlEnabled: z.boolean(),
-  crawlIntervalMinutes: z.coerce
-    .number({ error: "请填写抓取周期" })
-    .int("抓取周期必须为整数")
-    .min(5, "抓取周期不能小于 5 分钟")
-    .max(1440, "抓取周期不能超过 1440 分钟"),
-});
-
-const crawlConfigSchema = z.object({
-  bindingId: z.string().trim().min(1, "缺少绑定 ID"),
-  crawlEnabled: z.boolean(),
-  crawlIntervalMinutes: z.coerce
-    .number({ error: "请填写抓取周期" })
-    .int("抓取周期必须为整数")
-    .min(5, "抓取周期不能小于 5 分钟")
-    .max(1440, "抓取周期不能超过 1440 分钟"),
-});
-
-const bindingOperationSchema = z.object({
-  bindingId: z.string().trim().min(1, "缺少绑定 ID"),
-});
-
 function getOptionalTextValue(formData: FormData, key: string) {
   const value = formData.get(key);
 
   return typeof value === "string" ? value : undefined;
 }
 
-function buildManualCrawlErrorState(error: unknown): BindingActionState {
-  const message = getApiErrorMessage(error);
+function createBindingSchema(
+  messages: Awaited<ReturnType<typeof getRequestMessages>>["messages"],
+) {
+  return z.object({
+    xUserId: z.string().trim().min(1, messages.actions.bindings.missingXUserId),
+    username: z.string().trim().min(1, messages.actions.bindings.missingUsername),
+    displayName: z.string().trim().optional(),
+    avatarUrl: z
+      .union([z.string().trim().url(messages.actions.bindings.invalidAvatarUrl), z.literal("")])
+      .optional()
+      .transform((value) => value || undefined),
+    credentialSource: credentialSourceSchema,
+    credentialPayload: z
+      .string()
+      .trim()
+      .min(1, messages.actions.bindings.missingCredentialPayload),
+    crawlEnabled: z.boolean(),
+    crawlIntervalMinutes: z.coerce
+      .number({ error: messages.actions.bindings.missingCrawlInterval })
+      .int(messages.actions.bindings.invalidCrawlIntervalInt)
+      .min(5, messages.actions.bindings.invalidCrawlIntervalMin)
+      .max(1440, messages.actions.bindings.invalidCrawlIntervalMax),
+  });
+}
+
+function createCrawlConfigSchema(
+  messages: Awaited<ReturnType<typeof getRequestMessages>>["messages"],
+) {
+  return z.object({
+    bindingId: z.string().trim().min(1, messages.actions.bindings.missingBindingId),
+    crawlEnabled: z.boolean(),
+    crawlIntervalMinutes: z.coerce
+      .number({ error: messages.actions.bindings.missingCrawlInterval })
+      .int(messages.actions.bindings.invalidCrawlIntervalInt)
+      .min(5, messages.actions.bindings.invalidCrawlIntervalMin)
+      .max(1440, messages.actions.bindings.invalidCrawlIntervalMax),
+  });
+}
+
+function createBindingOperationSchema(
+  messages: Awaited<ReturnType<typeof getRequestMessages>>["messages"],
+) {
+  return z.object({
+    bindingId: z.string().trim().min(1, messages.actions.bindings.missingBindingId),
+  });
+}
+
+function buildManualCrawlErrorState(
+  error: unknown,
+  messages: Awaited<ReturnType<typeof getRequestMessages>>["messages"],
+): BindingActionState {
+  const message = getApiErrorMessage(error, messages.actions.api.requestFailed);
 
   if (!(error instanceof ApiRequestError) || error.status !== 409) {
     return {
@@ -82,7 +102,7 @@ function buildManualCrawlErrorState(error: unknown): BindingActionState {
 
   return {
     actionHref: `/runs/${matchedRunId}`,
-    actionLabel: "查看当前抓取记录",
+    actionLabel: messages.actions.bindings.viewCurrentRun,
     error: message,
   } satisfies BindingActionState;
 }
@@ -91,6 +111,8 @@ export async function upsertBindingAction(
   _previousState: BindingActionState,
   formData: FormData,
 ): Promise<BindingActionState> {
+  const { messages } = await getRequestMessages();
+  const bindingSchema = createBindingSchema(messages);
   const parsed = bindingSchema.safeParse({
     xUserId: getOptionalTextValue(formData, "xUserId"),
     username: getOptionalTextValue(formData, "username"),
@@ -104,7 +126,8 @@ export async function upsertBindingAction(
 
   if (!parsed.success) {
     return {
-      error: parsed.error.issues[0]?.message ?? "绑定信息校验失败。",
+      error:
+        parsed.error.issues[0]?.message ?? messages.actions.bindings.bindingValidationFailed,
     } satisfies BindingActionState;
   }
 
@@ -118,11 +141,11 @@ export async function upsertBindingAction(
     revalidatePath("/bindings");
 
     return {
-      success: "绑定信息已保存。",
+      success: messages.actions.bindings.bindingSaved,
     } satisfies BindingActionState;
   } catch (error) {
     return {
-      error: getApiErrorMessage(error),
+      error: getApiErrorMessage(error, messages.actions.api.requestFailed),
     } satisfies BindingActionState;
   }
 }
@@ -131,6 +154,8 @@ export async function updateCrawlConfigAction(
   _previousState: BindingActionState,
   formData: FormData,
 ): Promise<BindingActionState> {
+  const { messages } = await getRequestMessages();
+  const crawlConfigSchema = createCrawlConfigSchema(messages);
   const parsed = crawlConfigSchema.safeParse({
     bindingId: getOptionalTextValue(formData, "bindingId"),
     crawlEnabled: formData.get("crawlEnabled") === "on",
@@ -139,7 +164,8 @@ export async function updateCrawlConfigAction(
 
   if (!parsed.success) {
     return {
-      error: parsed.error.issues[0]?.message ?? "抓取配置校验失败。",
+      error:
+        parsed.error.issues[0]?.message ?? messages.actions.bindings.configValidationFailed,
     } satisfies BindingActionState;
   }
 
@@ -156,11 +182,11 @@ export async function updateCrawlConfigAction(
     revalidatePath("/bindings");
 
     return {
-      success: "抓取配置已更新。",
+      success: messages.actions.bindings.configSaved,
     } satisfies BindingActionState;
   } catch (error) {
     return {
-      error: getApiErrorMessage(error),
+      error: getApiErrorMessage(error, messages.actions.api.requestFailed),
     } satisfies BindingActionState;
   }
 }
@@ -169,13 +195,15 @@ export async function revalidateBindingAction(
   _previousState: BindingActionState,
   formData: FormData,
 ): Promise<BindingActionState> {
+  const { messages } = await getRequestMessages();
+  const bindingOperationSchema = createBindingOperationSchema(messages);
   const parsed = bindingOperationSchema.safeParse({
     bindingId: getOptionalTextValue(formData, "bindingId"),
   });
 
   if (!parsed.success) {
     return {
-      error: parsed.error.issues[0]?.message ?? "缺少绑定 ID。",
+      error: parsed.error.issues[0]?.message ?? messages.actions.bindings.missingBindingId,
     } satisfies BindingActionState;
   }
 
@@ -189,11 +217,11 @@ export async function revalidateBindingAction(
     revalidatePath("/bindings");
 
     return {
-      success: "绑定状态已重新校验。",
+      success: messages.actions.bindings.bindingRevalidated,
     } satisfies BindingActionState;
   } catch (error) {
     return {
-      error: getApiErrorMessage(error),
+      error: getApiErrorMessage(error, messages.actions.api.requestFailed),
     } satisfies BindingActionState;
   }
 }
@@ -202,13 +230,15 @@ export async function disableBindingAction(
   _previousState: BindingActionState,
   formData: FormData,
 ): Promise<BindingActionState> {
+  const { messages } = await getRequestMessages();
+  const bindingOperationSchema = createBindingOperationSchema(messages);
   const parsed = bindingOperationSchema.safeParse({
     bindingId: getOptionalTextValue(formData, "bindingId"),
   });
 
   if (!parsed.success) {
     return {
-      error: parsed.error.issues[0]?.message ?? "缺少绑定 ID。",
+      error: parsed.error.issues[0]?.message ?? messages.actions.bindings.missingBindingId,
     } satisfies BindingActionState;
   }
 
@@ -222,11 +252,11 @@ export async function disableBindingAction(
     revalidatePath("/bindings");
 
     return {
-      success: "绑定已停用。",
+      success: messages.actions.bindings.bindingDisabled,
     } satisfies BindingActionState;
   } catch (error) {
     return {
-      error: getApiErrorMessage(error),
+      error: getApiErrorMessage(error, messages.actions.api.requestFailed),
     } satisfies BindingActionState;
   }
 }
@@ -235,13 +265,15 @@ export async function unbindBindingAction(
   _previousState: BindingActionState,
   formData: FormData,
 ): Promise<BindingActionState> {
+  const { messages } = await getRequestMessages();
+  const bindingOperationSchema = createBindingOperationSchema(messages);
   const parsed = bindingOperationSchema.safeParse({
     bindingId: getOptionalTextValue(formData, "bindingId"),
   });
 
   if (!parsed.success) {
     return {
-      error: parsed.error.issues[0]?.message ?? "缺少绑定 ID。",
+      error: parsed.error.issues[0]?.message ?? messages.actions.bindings.missingBindingId,
     } satisfies BindingActionState;
   }
 
@@ -258,11 +290,14 @@ export async function unbindBindingAction(
     revalidatePath("/runs");
 
     return {
-      success: `绑定已解除，并删除 ${result.deletedArchiveCount} 条归档、${result.deletedRunCount} 条抓取记录。`,
+      success: formatMessage(messages.actions.bindings.bindingUnbound, {
+        deletedArchiveCount: result.deletedArchiveCount,
+        deletedRunCount: result.deletedRunCount,
+      }),
     } satisfies BindingActionState;
   } catch (error) {
     return {
-      error: getApiErrorMessage(error),
+      error: getApiErrorMessage(error, messages.actions.api.requestFailed),
     } satisfies BindingActionState;
   }
 }
@@ -271,13 +306,15 @@ export async function triggerManualCrawlAction(
   _previousState: BindingActionState,
   formData: FormData,
 ): Promise<BindingActionState> {
+  const { messages } = await getRequestMessages();
+  const bindingOperationSchema = createBindingOperationSchema(messages);
   const parsed = bindingOperationSchema.safeParse({
     bindingId: getOptionalTextValue(formData, "bindingId"),
   });
 
   if (!parsed.success) {
     return {
-      error: parsed.error.issues[0]?.message ?? "缺少绑定 ID。",
+      error: parsed.error.issues[0]?.message ?? messages.actions.bindings.missingBindingId,
     } satisfies BindingActionState;
   }
 
@@ -295,10 +332,13 @@ export async function triggerManualCrawlAction(
 
     return {
       actionHref: `/runs/${run.id}`,
-      actionLabel: "查看本次抓取记录",
-      success: `手动抓取已执行，当前状态：${run.status}（${run.triggerType}）。`,
+      actionLabel: messages.actions.bindings.viewTriggeredRun,
+      success: formatMessage(messages.actions.bindings.manualCrawlTriggered, {
+        status: run.status,
+        triggerType: run.triggerType,
+      }),
     } satisfies BindingActionState;
   } catch (error) {
-    return buildManualCrawlErrorState(error);
+    return buildManualCrawlErrorState(error, messages);
   }
 }

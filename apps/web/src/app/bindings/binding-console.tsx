@@ -23,6 +23,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { formatMessage, getIntlLocale, getMessages, type Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export type BindingRecord = {
@@ -51,7 +52,9 @@ export type BindingRecord = {
     };
 
 type BindingConsoleProps = {
+  browserDesktopUrl: string | null;
   currentBinding: BindingRecord | null;
+  locale: Locale;
 };
 
 type BindingBrowserSessionRecord = {
@@ -72,18 +75,12 @@ type BindingBrowserSessionRecord = {
 const initialActionState: BindingActionState = {};
 const browserBindingSessionStorageKey = "auto-x-to-wechat.binding-browser-session-id";
 
-const credentialSourceOptions = [
-  { value: "WEB_LOGIN", label: "网页登录态" },
-  { value: "COOKIE_IMPORT", label: "Cookie 导入" },
-  { value: "EXTENSION", label: "扩展采集" },
-] as const;
-
-function formatDateTime(value: string | null | undefined) {
+function formatDateTime(value: string | null | undefined, locale: Locale, emptyLabel: string) {
   if (!value) {
-    return "未记录";
+    return emptyLabel;
   }
 
-  return new Intl.DateTimeFormat("zh-CN", {
+  return new Intl.DateTimeFormat(getIntlLocale(locale), {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
@@ -93,29 +90,22 @@ function isBrowserSessionActive(status: BindingBrowserSessionRecord["status"]) {
   return status === "PENDING" || status === "WAITING_LOGIN";
 }
 
-function getBrowserSessionStatusText(status: BindingBrowserSessionRecord["status"]) {
-  return {
-    PENDING: "正在拉起浏览器",
-    WAITING_LOGIN: "等待你在 X 中登录",
-    SUCCESS: "绑定成功",
-    FAILED: "绑定失败",
-    EXPIRED: "会话已过期",
-    CANCELLED: "会话已取消",
-  }[status];
-}
-
 function getBrowserSessionBadgeClassName(status: BindingBrowserSessionRecord["status"]) {
   return {
-    PENDING: "bg-[#7f5a26] text-white",
-    WAITING_LOGIN: "bg-[#2d4d3f] text-white",
-    SUCCESS: "bg-emerald-600 text-white",
-    FAILED: "bg-red-600 text-white",
-    EXPIRED: "bg-slate-200 text-slate-700",
-    CANCELLED: "bg-slate-200 text-slate-700",
+    PENDING: "bg-[#7f5a26] text-white dark:bg-[#4b3a1e] dark:text-[#f2c58c]",
+    WAITING_LOGIN: "bg-[#2d4d3f] text-white dark:bg-[#d8e2db] dark:text-[#18201b]",
+    SUCCESS: "bg-emerald-600 text-white dark:bg-emerald-950/40 dark:text-emerald-100",
+    FAILED: "bg-red-600 text-white dark:bg-red-950/40 dark:text-red-200",
+    EXPIRED: "bg-slate-200 text-slate-700 dark:bg-white/10 dark:text-white/80",
+    CANCELLED: "bg-slate-200 text-slate-700 dark:bg-white/10 dark:text-white/80",
   }[status];
 }
 
-async function requestBrowserSession<T>(path: string, init?: RequestInit) {
+async function requestBrowserSession<T>(
+  path: string,
+  fallbackMessage: string,
+  init?: RequestInit,
+) {
   const response = await fetch(path, {
     ...init,
     cache: "no-store",
@@ -126,23 +116,29 @@ async function requestBrowserSession<T>(path: string, init?: RequestInit) {
     throw new Error(
       typeof (payload as { error?: string }).error === "string"
         ? (payload as { error?: string }).error
-        : "浏览器绑定请求失败，请稍后重试。",
+        : fallbackMessage,
     );
   }
 
   return payload as T;
 }
 
-function StatusBadge({ status }: { status: BindingRecord["status"] | "UNBOUND" }) {
+function StatusBadge({
+  label,
+  status,
+}: {
+  label: string;
+  status: BindingRecord["status"] | "UNBOUND";
+}) {
   const className = {
-    ACTIVE: "bg-[#2d4d3f] text-white",
-    INVALID: "bg-[#b95c00] text-white",
-    DISABLED: "bg-slate-200 text-slate-700",
-    PENDING: "bg-[#7f5a26] text-white",
-    UNBOUND: "bg-[#f4ebdb] text-[#7f5a26]",
+    ACTIVE: "bg-[#2d4d3f] text-white dark:bg-[#d8e2db] dark:text-[#18201b]",
+    INVALID: "bg-[#b95c00] text-white dark:bg-[#5a2e00] dark:text-[#ffd1a1]",
+    DISABLED: "bg-slate-200 text-slate-700 dark:bg-white/10 dark:text-white/80",
+    PENDING: "bg-[#7f5a26] text-white dark:bg-[#4b3a1e] dark:text-[#f2c58c]",
+    UNBOUND: "bg-[#f4ebdb] text-[#7f5a26] dark:bg-[#3d3124] dark:text-[#f2c58c]",
   }[status];
 
-  return <Badge className={cn("rounded-full", className)}>{status}</Badge>;
+  return <Badge className={cn("rounded-full", className)}>{label}</Badge>;
 }
 
 function FormFeedback({
@@ -154,7 +150,7 @@ function FormFeedback({
     state.actionHref && state.actionLabel ? (
       <Link
         href={state.actionHref}
-        className="mt-3 inline-flex h-8 items-center justify-center rounded-full bg-white px-3 text-xs font-medium transition-colors hover:bg-slate-100"
+        className="mt-3 inline-flex h-8 items-center justify-center rounded-full bg-white px-3 text-xs font-medium transition-colors hover:bg-slate-100 dark:bg-white/10 dark:text-white dark:hover:bg-white/14"
       >
         {state.actionLabel}
       </Link>
@@ -162,7 +158,7 @@ function FormFeedback({
 
   if (state.error) {
     return (
-      <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600">
+      <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-950/30 dark:text-red-200">
         <p>{state.error}</p>
         {actionLink}
       </div>
@@ -171,12 +167,12 @@ function FormFeedback({
 
   if (state.success) {
     return (
-      <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+      <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-100">
         <p>{state.success}</p>
         {state.actionHref && state.actionLabel ? (
           <Link
             href={state.actionHref}
-            className="mt-3 inline-flex h-8 items-center justify-center rounded-full bg-white px-3 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
+            className="mt-3 inline-flex h-8 items-center justify-center rounded-full bg-white px-3 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100 dark:bg-white/10 dark:text-emerald-100 dark:hover:bg-white/14"
           >
             {state.actionLabel}
           </Link>
@@ -202,7 +198,17 @@ function FieldLabel({
   );
 }
 
-export function BindingConsole({ currentBinding }: BindingConsoleProps) {
+export function BindingConsole({
+  browserDesktopUrl,
+  currentBinding,
+  locale,
+}: BindingConsoleProps) {
+  const messages = getMessages(locale);
+  const credentialSourceOptions = [
+    { value: "WEB_LOGIN", label: messages.enums.credentialSource.WEB_LOGIN },
+    { value: "COOKIE_IMPORT", label: messages.enums.credentialSource.COOKIE_IMPORT },
+    { value: "EXTENSION", label: messages.enums.credentialSource.EXTENSION },
+  ] as const;
   const router = useRouter();
   const [upsertState, upsertAction, isUpserting] = useActionState(
     upsertBindingAction,
@@ -232,6 +238,7 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
   const [browserSessionError, setBrowserSessionError] = useState<string | null>(null);
   const [isBrowserSessionPending, startBrowserSessionTransition] = useTransition();
   const refreshedBrowserSessionIdRef = useRef<string | null>(null);
+  const isBrowserSessionPollingRef = useRef(false);
 
   useEffect(() => {
     const storedSessionId = window.sessionStorage.getItem(browserBindingSessionStorageKey);
@@ -246,6 +253,7 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
       try {
         const nextSession = await requestBrowserSession<BindingBrowserSessionRecord>(
           `/api/bindings/browser-sessions/${storedSessionId}`,
+          messages.bindings.browserSessionRequestFailed,
         );
 
         if (cancelled) {
@@ -260,7 +268,7 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
         }
 
         setBrowserSessionError(
-          error instanceof Error ? error.message : "无法恢复浏览器绑定会话。",
+          error instanceof Error ? error.message : messages.bindings.browserSessionRestoreFailed,
         );
         window.sessionStorage.removeItem(browserBindingSessionStorageKey);
       }
@@ -296,9 +304,16 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
     const sessionId = browserSession.id;
 
     async function pollBrowserSession() {
+      if (isBrowserSessionPollingRef.current) {
+        return;
+      }
+
+      isBrowserSessionPollingRef.current = true;
+
       try {
         const nextSession = await requestBrowserSession<BindingBrowserSessionRecord>(
           `/api/bindings/browser-sessions/${sessionId}`,
+          messages.bindings.browserSessionRequestFailed,
         );
 
         if (cancelled) {
@@ -321,8 +336,10 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
         }
 
         setBrowserSessionError(
-          error instanceof Error ? error.message : "浏览器绑定轮询失败，请稍后重试。",
+          error instanceof Error ? error.message : messages.bindings.browserSessionPollingFailed,
         );
+      } finally {
+        isBrowserSessionPollingRef.current = false;
       }
     }
 
@@ -339,11 +356,14 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
   }, [browserSession, router]);
 
   function handleStartBrowserBinding() {
+    const remoteDesktopWindow = browserDesktopUrl ? window.open(browserDesktopUrl, "_blank") : null;
+
     startBrowserSessionTransition(() => {
       void (async () => {
         try {
           const nextSession = await requestBrowserSession<BindingBrowserSessionRecord>(
             "/api/bindings/browser-sessions",
+            messages.bindings.browserSessionRequestFailed,
             {
               method: "POST",
             },
@@ -353,8 +373,9 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
           setBrowserSession(nextSession);
           setBrowserSessionError(null);
         } catch (error) {
+          remoteDesktopWindow?.close();
           setBrowserSessionError(
-            error instanceof Error ? error.message : "无法启动浏览器绑定流程。",
+            error instanceof Error ? error.message : messages.bindings.browserSessionStartFailed,
           );
         }
       })();
@@ -371,6 +392,7 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
         try {
           const nextSession = await requestBrowserSession<BindingBrowserSessionRecord>(
             `/api/bindings/browser-sessions/${browserSession.id}/cancel`,
+            messages.bindings.browserSessionRequestFailed,
             {
               method: "POST",
             },
@@ -380,7 +402,7 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
           setBrowserSessionError(null);
         } catch (error) {
           setBrowserSessionError(
-            error instanceof Error ? error.message : "无法取消浏览器绑定流程。",
+            error instanceof Error ? error.message : messages.bindings.browserSessionCancelFailed,
           );
         }
       })();
@@ -388,9 +410,7 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
   }
 
   function handleUnbindSubmit(event: React.FormEvent<HTMLFormElement>) {
-    const confirmed = window.confirm(
-      "解除绑定会删除当前账号下的归档帖子和抓取记录，且不可恢复。确定继续吗？",
-    );
+    const confirmed = window.confirm(messages.bindings.unbindConfirm);
 
     if (!confirmed) {
       event.preventDefault();
@@ -400,84 +420,102 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
   return (
     <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
       <div className="space-y-6">
-        <Card className="rounded-[2rem] border-border/70 bg-white/90 shadow-[0_24px_80px_-40px_rgba(87,62,22,0.35)]">
+        <Card className="rounded-[2rem] border-border/70 bg-white/90 shadow-[0_24px_80px_-40px_rgba(87,62,22,0.35)] dark:border-white/10 dark:bg-white/6 dark:shadow-[0_24px_80px_-40px_rgba(0,0,0,0.5)]">
           <CardHeader className="gap-3">
             <div className="flex items-center justify-between gap-3">
-              <CardTitle className="text-2xl">当前绑定状态</CardTitle>
-              <StatusBadge status={currentBinding?.status ?? "UNBOUND"} />
+              <CardTitle className="text-2xl">{messages.bindings.statusTitle}</CardTitle>
+              <StatusBadge
+                label={messages.enums.bindingStatus[currentBinding?.status ?? "UNBOUND"]}
+                status={currentBinding?.status ?? "UNBOUND"}
+              />
             </div>
             <CardDescription className="leading-6">
-              这里会持续展示当前绑定账号、抓取开关、校验结果和下一次执行时间。
+              {messages.bindings.statusDescription}
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             {currentBinding ? (
               <>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-3xl bg-[#f5efe4] p-5">
-                    <p className="text-xs uppercase tracking-[0.24em] text-[#7f5a26]">
-                      Username
+                  <div className="rounded-3xl bg-[#f5efe4] p-5 dark:bg-[#3d3124]">
+                    <p className="text-xs uppercase tracking-[0.24em] text-[#7f5a26] dark:text-[#f2c58c]">
+                      {messages.bindings.username}
                     </p>
                     <p className="mt-2 text-base font-medium text-foreground">
                       @{currentBinding.username}
                     </p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      {currentBinding.displayName ?? "未填写显示名"}
+                      {currentBinding.displayName ?? messages.common.noDisplayName}
                     </p>
                   </div>
-                  <div className="rounded-3xl bg-[#eef4f0] p-5">
-                    <p className="text-xs uppercase tracking-[0.24em] text-[#2d4d3f]">
-                      X User Id
+                  <div className="rounded-3xl bg-[#eef4f0] p-5 dark:bg-[#223228]">
+                    <p className="text-xs uppercase tracking-[0.24em] text-[#2d4d3f] dark:text-[#d8e2db]">
+                      {messages.bindings.xUserId}
                     </p>
                     <p className="mt-2 font-mono text-sm text-foreground">{currentBinding.xUserId}</p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      凭证来源：{credentialSourceOptions.find((item) => item.value === currentBinding.credentialSource)?.label}
+                      {messages.bindings.credentialSource}：
+                      {credentialSourceOptions.find((item) => item.value === currentBinding.credentialSource)?.label}
                     </p>
                   </div>
                 </div>
                 <dl className="grid gap-3 text-sm sm:grid-cols-2">
-                  <div className="rounded-2xl border border-border/70 bg-[#fcfaf5] px-4 py-3">
+                  <div className="rounded-2xl border border-border/70 bg-[#fcfaf5] px-4 py-3 dark:border-white/10 dark:bg-white/8">
                     <dt className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                      最近校验
-                    </dt>
-                    <dd className="mt-1 text-foreground">{formatDateTime(currentBinding.lastValidatedAt)}</dd>
-                  </div>
-                  <div className="rounded-2xl border border-border/70 bg-[#fcfaf5] px-4 py-3">
-                    <dt className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                      下一次抓取
+                      {messages.bindings.lastValidatedAt}
                     </dt>
                     <dd className="mt-1 text-foreground">
-                      {formatDateTime(currentBinding.crawlJob?.nextRunAt ?? currentBinding.nextCrawlAt)}
+                      {formatDateTime(
+                        currentBinding.lastValidatedAt,
+                        locale,
+                        messages.common.notRecorded,
+                      )}
                     </dd>
                   </div>
-                  <div className="rounded-2xl border border-border/70 bg-[#fcfaf5] px-4 py-3">
+                  <div className="rounded-2xl border border-border/70 bg-[#fcfaf5] px-4 py-3 dark:border-white/10 dark:bg-white/8">
                     <dt className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                      自动抓取
+                      {messages.bindings.nextCrawlAt}
                     </dt>
                     <dd className="mt-1 text-foreground">
-                      {currentBinding.crawlEnabled ? "已开启" : "已关闭"}
+                      {formatDateTime(
+                        currentBinding.crawlJob?.nextRunAt ?? currentBinding.nextCrawlAt,
+                        locale,
+                        messages.common.notScheduled,
+                      )}
                     </dd>
                   </div>
-                  <div className="rounded-2xl border border-border/70 bg-[#fcfaf5] px-4 py-3">
+                  <div className="rounded-2xl border border-border/70 bg-[#fcfaf5] px-4 py-3 dark:border-white/10 dark:bg-white/8">
                     <dt className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                      抓取周期
+                      {messages.bindings.autoCrawlTitle}
                     </dt>
                     <dd className="mt-1 text-foreground">
-                      每 {currentBinding.crawlIntervalMinutes} 分钟
+                      {currentBinding.crawlEnabled
+                        ? messages.bindings.crawlEnabled
+                        : messages.bindings.crawlDisabled}
+                    </dd>
+                  </div>
+                  <div className="rounded-2xl border border-border/70 bg-[#fcfaf5] px-4 py-3 dark:border-white/10 dark:bg-white/8">
+                    <dt className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                      {messages.bindings.crawlIntervalLabel}
+                    </dt>
+                    <dd className="mt-1 text-foreground">
+                      {formatMessage(messages.bindings.crawlInterval, {
+                        minutes: currentBinding.crawlIntervalMinutes,
+                      })}
                     </dd>
                   </div>
                 </dl>
                 {currentBinding.lastErrorMessage ? (
-                  <div className="rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
-                    <p className="font-medium">最近错误</p>
+                  <div className="rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800 dark:border-amber-400/25 dark:bg-amber-950/30 dark:text-amber-100">
+                    <p className="font-medium">{messages.bindings.latestError}</p>
                     <p className="mt-2 leading-6">{currentBinding.lastErrorMessage}</p>
                   </div>
                 ) : null}
               </>
             ) : (
               <EmptyState
-                title="还没有绑定 X 账号"
-                description="优先使用右侧的浏览器辅助绑定流程。登录成功后，这里会自动展示绑定状态、抓取配置和最近校验结果。"
+                title={messages.bindings.emptyTitle}
+                description={messages.bindings.emptyDescription}
               />
             )}
           </CardContent>
@@ -485,30 +523,30 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
 
         {currentBinding ? (
           <>
-            <Card className="rounded-[2rem] border-border/70 bg-white/90 shadow-[0_24px_80px_-40px_rgba(45,77,63,0.28)]">
+            <Card className="rounded-[2rem] border-border/70 bg-white/90 shadow-[0_24px_80px_-40px_rgba(45,77,63,0.28)] dark:border-white/10 dark:bg-white/6 dark:shadow-[0_24px_80px_-40px_rgba(0,0,0,0.5)]">
               <CardHeader>
-                <CardTitle className="text-xl">抓取配置</CardTitle>
-                <CardDescription>单独调整抓取开关和抓取周期，不需要重新粘贴凭证。</CardDescription>
+                <CardTitle className="text-xl">{messages.bindings.crawlConfigTitle}</CardTitle>
+                <CardDescription>{messages.bindings.crawlConfigDescription}</CardDescription>
               </CardHeader>
               <CardContent>
                 <form action={configAction} className="space-y-5">
                   <input type="hidden" name="bindingId" value={currentBinding.id} />
-                  <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-[#f8faf8] px-4 py-3">
+                  <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-[#f8faf8] px-4 py-3 dark:border-white/10 dark:bg-white/8">
                     <div>
-                      <p className="font-medium text-foreground">自动抓取</p>
+                      <p className="font-medium text-foreground">{messages.bindings.autoCrawlTitle}</p>
                       <p className="text-sm text-muted-foreground">
-                        关闭后将不再自动安排下一次抓取。
+                        {messages.bindings.autoCrawlDescription}
                       </p>
                     </div>
                     <input
                       type="checkbox"
                       name="crawlEnabled"
                       defaultChecked={currentBinding.crawlEnabled}
-                      className="h-4 w-4 rounded border-border text-[#2d4d3f] focus:ring-[#2d4d3f]"
+                      className="h-4 w-4 rounded border-border text-[#2d4d3f] focus:ring-[#2d4d3f] dark:border-white/20 dark:bg-white/10 dark:text-[#d8e2db] dark:focus:ring-[#d8e2db]"
                     />
                   </div>
                   <div className="space-y-2">
-                    <FieldLabel htmlFor="crawlIntervalMinutes">抓取周期（分钟）</FieldLabel>
+                    <FieldLabel htmlFor="crawlIntervalMinutes">{messages.bindings.crawlIntervalLabel}</FieldLabel>
                     <Input
                       id="crawlIntervalMinutes"
                       name="crawlIntervalMinutes"
@@ -516,35 +554,35 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
                       min={5}
                       max={1440}
                       defaultValue={String(currentBinding.crawlIntervalMinutes)}
-                      className="h-11 rounded-2xl border-border/70 bg-[#fcfaf5] px-4"
+                      className="h-11 rounded-2xl border-border/70 bg-[#fcfaf5] px-4 dark:border-white/10 dark:bg-white/8"
                     />
                   </div>
                   <FormFeedback state={configState} />
                   <Button
                     type="submit"
-                    className="rounded-full bg-[#2d4d3f] px-5 hover:bg-[#20372d]"
+                    className="rounded-full bg-[#2d4d3f] px-5 hover:bg-[#20372d] dark:bg-[#d8e2db] dark:text-[#18201b] dark:hover:bg-[#c8d3cb]"
                     disabled={isConfigPending}
                   >
-                    {isConfigPending ? "保存中..." : "保存抓取配置"}
+                    {isConfigPending ? messages.bindings.savingConfig : messages.bindings.saveConfig}
                   </Button>
                 </form>
               </CardContent>
             </Card>
 
-            <Card className="rounded-[2rem] border-border/70 bg-white/90 shadow-[0_24px_80px_-40px_rgba(87,62,22,0.2)]">
+            <Card className="rounded-[2rem] border-border/70 bg-white/90 shadow-[0_24px_80px_-40px_rgba(87,62,22,0.2)] dark:border-white/10 dark:bg-white/6 dark:shadow-[0_24px_80px_-40px_rgba(0,0,0,0.5)]">
               <CardHeader>
-                <CardTitle className="text-xl">绑定操作</CardTitle>
-                <CardDescription>这里可以立即触发一次抓取、重新校验凭证，或停用当前绑定。</CardDescription>
+                <CardTitle className="text-xl">{messages.bindings.operationsTitle}</CardTitle>
+                <CardDescription>{messages.bindings.operationsDescription}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <form action={manualCrawlAction} className="space-y-3">
                   <input type="hidden" name="bindingId" value={currentBinding.id} />
                   <Button
                     type="submit"
-                    className="rounded-full bg-[#7f5a26] px-5 hover:bg-[#65471f]"
+                    className="rounded-full bg-[#7f5a26] px-5 hover:bg-[#65471f] dark:bg-[#f2c58c] dark:text-[#2c2114] dark:hover:bg-[#e5b775]"
                     disabled={isManualCrawlPending || currentBinding.status !== "ACTIVE"}
                   >
-                    {isManualCrawlPending ? "抓取中..." : "立即抓取"}
+                    {isManualCrawlPending ? messages.bindings.triggeringNow : messages.bindings.triggerNow}
                   </Button>
                   <FormFeedback state={manualCrawlState} />
                 </form>
@@ -556,7 +594,7 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
                     className="rounded-full px-5"
                     disabled={isValidatePending}
                   >
-                    {isValidatePending ? "校验中..." : "重新校验绑定"}
+                    {isValidatePending ? messages.bindings.revalidating : messages.bindings.revalidate}
                   </Button>
                   <FormFeedback state={validateState} />
                 </form>
@@ -568,7 +606,7 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
                     className="rounded-full px-5"
                     disabled={isDisablePending || currentBinding.status === "DISABLED"}
                   >
-                    {isDisablePending ? "停用中..." : "停用绑定"}
+                    {isDisablePending ? messages.bindings.disabling : messages.bindings.disable}
                   </Button>
                   <FormFeedback state={disableState} />
                 </form>
@@ -578,8 +616,8 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
                   onSubmit={handleUnbindSubmit}
                 >
                   <input type="hidden" name="bindingId" value={currentBinding.id} />
-                  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                    解除绑定会删除当前绑定下的归档帖子和抓取记录。为避免数据损失，请仅在确认不再需要这些数据时执行。
+                  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-400/25 dark:bg-red-950/30 dark:text-red-200">
+                    {messages.bindings.unbindWarning}
                   </div>
                   <Button
                     type="submit"
@@ -587,7 +625,7 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
                     className="rounded-full px-5"
                     disabled={isUnbindPending}
                   >
-                    {isUnbindPending ? "解绑中..." : "解除绑定并删除记录"}
+                    {isUnbindPending ? messages.bindings.unbinding : messages.bindings.unbind}
                   </Button>
                   <FormFeedback state={unbindState} />
                 </form>
@@ -598,27 +636,32 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
       </div>
 
       <div className="space-y-6">
-        <Card className="rounded-[2rem] border-border/70 bg-white/95 shadow-[0_24px_80px_-40px_rgba(31,49,40,0.3)]">
+        <Card className="rounded-[2rem] border-border/70 bg-white/95 shadow-[0_24px_80px_-40px_rgba(31,49,40,0.3)] dark:border-white/10 dark:bg-white/6 dark:shadow-[0_24px_80px_-40px_rgba(0,0,0,0.5)]">
           <CardHeader>
-            <CardTitle className="text-2xl">浏览器辅助绑定</CardTitle>
+            <CardTitle className="text-2xl">{messages.bindings.browserAssistTitle}</CardTitle>
             <CardDescription className="leading-6">
               {currentBinding
-                ? "如果你想更换账号或刷新 X 登录态，直接重新发起一次浏览器登录即可。系统会自动回收账号信息和 Cookie，并覆盖当前绑定凭证。"
-                : "点击下面的按钮后，系统会在当前机器自动打开一个可见的 X 登录窗口。你只需要手动完成登录，剩下的绑定与 Cookie 回填会自动完成。"}
+                ? messages.bindings.browserAssistDescriptionBound
+                : messages.bindings.browserAssistDescription}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
-            <div className="rounded-[1.75rem] border border-border/70 bg-[linear-gradient(135deg,#f5efe4,rgba(238,244,240,0.88))] p-5">
+            {browserDesktopUrl ? (
+              <div className="rounded-2xl border border-[#c7b08a]/40 bg-[#f5efe4] px-4 py-3 text-sm text-[#6c4c1f] dark:border-[#f2c58c]/20 dark:bg-[#3d3124] dark:text-[#f8ddb5]">
+                {messages.bindings.browserRemoteDesktopNotice}
+              </div>
+            ) : null}
+            <div className="rounded-[1.75rem] border border-border/70 bg-[linear-gradient(135deg,#f5efe4,rgba(238,244,240,0.88))] p-5 dark:border-white/10 dark:bg-[linear-gradient(135deg,rgba(61,49,36,0.96),rgba(34,50,40,0.92))]">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.24em] text-[#7f5a26]">Flow</p>
+                  <p className="text-xs uppercase tracking-[0.24em] text-[#7f5a26] dark:text-[#f2c58c]">{messages.bindings.browserFlowTitle}</p>
                   <p className="mt-2 text-lg font-semibold text-foreground">
                     {browserSession
-                      ? getBrowserSessionStatusText(browserSession.status)
-                      : "一键拉起 X 登录窗口"}
+                      ? messages.enums.browserSessionStatus[browserSession.status]
+                      : messages.bindings.startBrowserBinding}
                   </p>
                   <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    浏览器窗口打开后，请直接在 X 页面里手动登录。当前页面会自动轮询会话状态，并在成功后刷新绑定信息。
+                    {messages.bindings.browserFlowDescription}
                   </p>
                 </div>
                 {browserSession ? (
@@ -628,56 +671,56 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
                       getBrowserSessionBadgeClassName(browserSession.status),
                     )}
                   >
-                    {getBrowserSessionStatusText(browserSession.status)}
+                    {messages.enums.browserSessionStatus[browserSession.status]}
                   </Badge>
                 ) : null}
               </div>
               <div className="mt-4 grid gap-3 text-sm text-muted-foreground">
-                <p>1. 点击“打开 X 登录窗口并开始绑定”。</p>
-                <p>2. 在新打开的浏览器里完成 X 登录或账号切换。</p>
-                <p>3. 回到当前页面，等待系统自动绑定用户信息与 Cookie。</p>
+                <p>{messages.bindings.browserStep1}</p>
+                <p>{messages.bindings.browserStep2}</p>
+                <p>{messages.bindings.browserStep3}</p>
               </div>
             </div>
 
             {browserSession ? (
-              <div className="rounded-[1.75rem] border border-border/70 bg-[#fcfaf5] p-5">
+              <div className="rounded-[1.75rem] border border-border/70 bg-[#fcfaf5] p-5 dark:border-white/10 dark:bg-white/8">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
                     <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                      Session Id
+                      {messages.bindings.sessionId}
                     </p>
                     <p className="mt-2 font-mono text-sm text-foreground">{browserSession.id}</p>
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                      会话过期时间
+                      {messages.bindings.sessionExpiresAt}
                     </p>
                     <p className="mt-2 text-sm text-foreground">
-                      {formatDateTime(browserSession.expiresAt)}
+                      {formatDateTime(browserSession.expiresAt, locale, messages.common.notRecorded)}
                     </p>
                   </div>
                 </div>
 
                 {browserSession.username ? (
-                  <div className="mt-4 rounded-2xl bg-white px-4 py-3 text-sm text-foreground">
+                  <div className="mt-4 rounded-2xl bg-white px-4 py-3 text-sm text-foreground dark:bg-white/10">
                     <p className="font-medium">
                       @{browserSession.username}
                       {browserSession.displayName ? ` · ${browserSession.displayName}` : ""}
                     </p>
                     <p className="mt-1 text-muted-foreground">
-                      {browserSession.xUserId ?? "正在回填 X 用户 ID"}
+                      {browserSession.xUserId ?? messages.bindings.fillingUserId}
                     </p>
                   </div>
                 ) : null}
 
                 {browserSession.status === "SUCCESS" ? (
-                  <div className="mt-4 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                    浏览器登录成功，系统已经自动保存绑定资料与 Cookie。当前页面会自动刷新到最新绑定状态。
+                  <div className="mt-4 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-100">
+                    {messages.bindings.browserSuccess}
                   </div>
                 ) : null}
 
                 {browserSession.errorMessage ? (
-                  <div className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  <div className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
                     {browserSession.errorMessage}
                   </div>
                 ) : null}
@@ -685,7 +728,7 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
             ) : null}
 
             {browserSessionError ? (
-              <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600">
+              <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-950/30 dark:text-red-200">
                 {browserSessionError}
               </div>
             ) : null}
@@ -693,16 +736,28 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
             <div className="flex flex-wrap gap-3">
               <Button
                 type="button"
-                className="rounded-full bg-[#2d4d3f] px-5 hover:bg-[#20372d]"
+                className="rounded-full bg-[#2d4d3f] px-5 hover:bg-[#20372d] dark:bg-[#d8e2db] dark:text-[#18201b] dark:hover:bg-[#c8d3cb]"
                 disabled={isBrowserSessionPending && !browserSession}
                 onClick={handleStartBrowserBinding}
               >
                 {isBrowserSessionPending && !browserSession
-                  ? "正在启动..."
+                  ? messages.bindings.startingBrowserBinding
                   : browserSession && isBrowserSessionActive(browserSession.status)
-                    ? "重新打开新的绑定会话"
-                    : "打开 X 登录窗口并开始绑定"}
+                    ? messages.bindings.startBrowserBindingAgain
+                    : messages.bindings.startBrowserBinding}
               </Button>
+              {browserSession && isBrowserSessionActive(browserSession.status) ? (
+                browserDesktopUrl ? (
+                  <a
+                    href={browserDesktopUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-10 items-center justify-center rounded-full border border-border bg-white px-5 text-sm font-medium text-foreground transition-colors hover:bg-muted dark:border-white/10 dark:bg-white/8 dark:hover:bg-white/12"
+                  >
+                    {messages.bindings.openBrowserDesktop}
+                  </a>
+                ) : null
+              ) : null}
               {browserSession && isBrowserSessionActive(browserSession.status) ? (
                 <Button
                   type="button"
@@ -711,7 +766,7 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
                   disabled={isBrowserSessionPending}
                   onClick={handleCancelBrowserBinding}
                 >
-                  取消当前会话
+                  {messages.bindings.cancelBrowserBinding}
                 </Button>
               ) : null}
               {browserSession?.status === "SUCCESS" ? (
@@ -721,75 +776,75 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
                   className="rounded-full px-5"
                   onClick={() => router.refresh()}
                 >
-                  立即刷新绑定状态
+                  {messages.bindings.refreshBindingState}
                 </Button>
               ) : null}
             </div>
           </CardContent>
         </Card>
 
-        <Card className="rounded-[2rem] border-border/70 bg-white/95 shadow-[0_24px_80px_-40px_rgba(31,49,40,0.22)]">
+        <Card className="rounded-[2rem] border-border/70 bg-white/95 shadow-[0_24px_80px_-40px_rgba(31,49,40,0.22)] dark:border-white/10 dark:bg-white/6 dark:shadow-[0_24px_80px_-40px_rgba(0,0,0,0.5)]">
           <CardHeader>
-            <CardTitle className="text-2xl">高级手动录入</CardTitle>
+            <CardTitle className="text-2xl">{messages.bindings.advancedTitle}</CardTitle>
             <CardDescription className="leading-6">
-              仅在调试、导入历史凭证或处理非标准场景时使用。日常绑定建议优先走上面的浏览器辅助流程。
+              {messages.bindings.advancedDescription}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form action={upsertAction} className="space-y-5">
               <div className="grid gap-5 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <FieldLabel htmlFor="xUserId">X 用户 ID</FieldLabel>
+                  <FieldLabel htmlFor="xUserId">{messages.bindings.xUserId}</FieldLabel>
                   <Input
                     id="xUserId"
                     name="xUserId"
                     defaultValue={currentBinding?.xUserId ?? ""}
-                    placeholder="例如 44196397"
-                    className="h-11 rounded-2xl border-border/70 bg-[#fcfaf5] px-4"
+                    placeholder={messages.bindings.placeholders.xUserId}
+                    className="h-11 rounded-2xl border-border/70 bg-[#fcfaf5] px-4 dark:border-white/10 dark:bg-white/8"
                   />
                 </div>
                 <div className="space-y-2">
-                  <FieldLabel htmlFor="username">用户名</FieldLabel>
+                  <FieldLabel htmlFor="username">{messages.bindings.username}</FieldLabel>
                   <Input
                     id="username"
                     name="username"
                     defaultValue={currentBinding?.username ?? ""}
-                    placeholder="例如 openai"
-                    className="h-11 rounded-2xl border-border/70 bg-[#fcfaf5] px-4"
+                    placeholder={messages.bindings.placeholders.username}
+                    className="h-11 rounded-2xl border-border/70 bg-[#fcfaf5] px-4 dark:border-white/10 dark:bg-white/8"
                   />
                 </div>
               </div>
 
               <div className="grid gap-5 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <FieldLabel htmlFor="displayName">显示名</FieldLabel>
+                  <FieldLabel htmlFor="displayName">{messages.bindings.displayName}</FieldLabel>
                   <Input
                     id="displayName"
                     name="displayName"
                     defaultValue={currentBinding?.displayName ?? ""}
-                    placeholder="例如 OpenAI"
-                    className="h-11 rounded-2xl border-border/70 bg-[#fcfaf5] px-4"
+                    placeholder={messages.bindings.placeholders.displayName}
+                    className="h-11 rounded-2xl border-border/70 bg-[#fcfaf5] px-4 dark:border-white/10 dark:bg-white/8"
                   />
                 </div>
                 <div className="space-y-2">
-                  <FieldLabel htmlFor="avatarUrl">头像 URL</FieldLabel>
+                  <FieldLabel htmlFor="avatarUrl">{messages.bindings.avatarUrl}</FieldLabel>
                   <Input
                     id="avatarUrl"
                     name="avatarUrl"
                     defaultValue={currentBinding?.avatarUrl ?? ""}
                     placeholder="https://..."
-                    className="h-11 rounded-2xl border-border/70 bg-[#fcfaf5] px-4"
+                    className="h-11 rounded-2xl border-border/70 bg-[#fcfaf5] px-4 dark:border-white/10 dark:bg-white/8"
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <FieldLabel htmlFor="credentialSource">凭证来源</FieldLabel>
+                <FieldLabel htmlFor="credentialSource">{messages.bindings.credentialSourceLabel}</FieldLabel>
                 <select
                   id="credentialSource"
                   name="credentialSource"
                   defaultValue={currentBinding?.credentialSource ?? "WEB_LOGIN"}
-                  className="h-11 w-full rounded-2xl border border-border/70 bg-[#fcfaf5] px-4 text-sm text-foreground outline-none ring-0 transition focus:border-ring focus:ring-3 focus:ring-ring/40"
+                  className="h-11 w-full rounded-2xl border border-border/70 bg-[#fcfaf5] px-4 text-sm text-foreground outline-none ring-0 transition focus:border-ring focus:ring-3 focus:ring-ring/40 dark:border-white/10 dark:bg-white/8"
                 >
                   {credentialSourceOptions.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -800,34 +855,34 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
               </div>
 
               <div className="space-y-2">
-                <FieldLabel htmlFor="credentialPayload">抓取凭证</FieldLabel>
+                <FieldLabel htmlFor="credentialPayload">{messages.bindings.credentialPayload}</FieldLabel>
                 <textarea
                   id="credentialPayload"
                   name="credentialPayload"
                   rows={8}
-                  placeholder='例如 {"adapter":"real","cookies":[...],"username":"demo_x_user"}'
-                  className="w-full rounded-[1.5rem] border border-border/70 bg-[#fcfaf5] px-4 py-3 text-sm leading-6 text-foreground outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/40"
+                  placeholder={messages.bindings.placeholders.credentialPayload}
+                  className="w-full rounded-[1.5rem] border border-border/70 bg-[#fcfaf5] px-4 py-3 text-sm leading-6 text-foreground outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/40 dark:border-white/10 dark:bg-white/8"
                 />
                 <p className="text-sm leading-6 text-muted-foreground">
-                  如果你手动维护 JSON 凭证，请确保字段结构与后端适配器要求一致。浏览器辅助绑定会自动生成这份凭证，无需手填。
+                  {messages.bindings.credentialPayloadHint}
                 </p>
               </div>
 
               <div className="grid gap-5 sm:grid-cols-[1fr_220px]">
-                <div className="flex items-center justify-between rounded-[1.5rem] border border-border/70 bg-[#f8faf8] px-4 py-3">
+                <div className="flex items-center justify-between rounded-[1.5rem] border border-border/70 bg-[#f8faf8] px-4 py-3 dark:border-white/10 dark:bg-white/8">
                   <div>
-                    <p className="font-medium text-foreground">提交后立即启用自动抓取</p>
-                    <p className="text-sm text-muted-foreground">如果暂时只想保存凭证，也可以先关闭。</p>
+                    <p className="font-medium text-foreground">{messages.bindings.enableAutoCrawlAfterSave}</p>
+                    <p className="text-sm text-muted-foreground">{messages.bindings.enableAutoCrawlAfterSaveHint}</p>
                   </div>
                   <input
                     type="checkbox"
                     name="crawlEnabled"
                     defaultChecked={currentBinding?.crawlEnabled ?? true}
-                    className="h-4 w-4 rounded border-border text-[#2d4d3f] focus:ring-[#2d4d3f]"
+                    className="h-4 w-4 rounded border-border text-[#2d4d3f] focus:ring-[#2d4d3f] dark:border-white/20 dark:bg-white/10 dark:text-[#d8e2db] dark:focus:ring-[#d8e2db]"
                   />
                 </div>
                 <div className="space-y-2">
-                  <FieldLabel htmlFor="bindingCrawlIntervalMinutes">抓取周期（分钟）</FieldLabel>
+                  <FieldLabel htmlFor="bindingCrawlIntervalMinutes">{messages.bindings.crawlIntervalLabel}</FieldLabel>
                   <Input
                     id="bindingCrawlIntervalMinutes"
                     name="crawlIntervalMinutes"
@@ -835,7 +890,7 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
                     min={5}
                     max={1440}
                     defaultValue={String(currentBinding?.crawlIntervalMinutes ?? 60)}
-                    className="h-11 rounded-2xl border-border/70 bg-[#fcfaf5] px-4"
+                    className="h-11 rounded-2xl border-border/70 bg-[#fcfaf5] px-4 dark:border-white/10 dark:bg-white/8"
                   />
                 </div>
               </div>
@@ -843,14 +898,14 @@ export function BindingConsole({ currentBinding }: BindingConsoleProps) {
               <FormFeedback state={upsertState} />
               <Button
                 type="submit"
-                className="rounded-full bg-[#2d4d3f] px-5 hover:bg-[#20372d]"
+                className="rounded-full bg-[#2d4d3f] px-5 hover:bg-[#20372d] dark:bg-[#d8e2db] dark:text-[#18201b] dark:hover:bg-[#c8d3cb]"
                 disabled={isUpserting}
               >
                 {isUpserting
-                  ? "提交中..."
+                  ? messages.bindings.submitting
                   : currentBinding
-                    ? "更新绑定与凭证"
-                    : "创建绑定"}
+                    ? messages.bindings.update
+                    : messages.bindings.submit}
               </Button>
             </form>
           </CardContent>

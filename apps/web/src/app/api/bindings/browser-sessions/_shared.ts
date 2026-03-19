@@ -6,9 +6,12 @@ import {
   getApiErrorMessage,
   type ApiRequestUser,
 } from "@/lib/api-client";
+import { getRequestMessages } from "@/lib/request-locale";
 
-function buildUnauthorizedResponse() {
-  return NextResponse.json({ error: "未登录或会话已失效。" }, { status: 401 });
+async function buildUnauthorizedResponse() {
+  const { messages } = await getRequestMessages();
+
+  return NextResponse.json({ error: messages.actions.api.unauthorized }, { status: 401 });
 }
 
 export async function getAuthenticatedApiUser() {
@@ -33,6 +36,8 @@ export async function proxyApiRequest<T>(
     path: string;
   },
 ) {
+  const { messages } = await getRequestMessages();
+
   try {
     const payload = await apiRequestWithUser<T>(user, input);
 
@@ -42,7 +47,7 @@ export async function proxyApiRequest<T>(
 
     return NextResponse.json(
       {
-        error: getApiErrorMessage(error),
+        error: getApiErrorMessage(error, messages.actions.api.requestFailed),
       },
       { status },
     );
