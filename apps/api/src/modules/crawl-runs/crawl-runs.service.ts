@@ -18,6 +18,11 @@ type CompleteCrawlRunInput = {
   status: CrawlRunStatus;
 };
 
+type ListCrawlRunsOptions = {
+  page?: number;
+  pageSize?: number;
+};
+
 export const crawlRunExecutionArgs = {
   include: {
     binding: true,
@@ -97,5 +102,43 @@ export class CrawlRunsService {
         runPosts: true,
       },
     });
+  }
+
+  async listByUser(userId: string, options: ListCrawlRunsOptions = {}) {
+    const page = options.page ?? 1;
+    const pageSize = options.pageSize ?? 20;
+    const skip = (page - 1) * pageSize;
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.crawlRun.findMany({
+        where: {
+          binding: {
+            userId,
+          },
+        },
+        include: {
+          binding: true,
+          crawlJob: true,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.crawlRun.count({
+        where: {
+          binding: {
+            userId,
+          },
+        },
+      }),
+    ]);
+
+    return {
+      items,
+      page,
+      pageSize,
+      total,
+    };
   }
 }
