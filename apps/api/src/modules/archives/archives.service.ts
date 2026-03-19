@@ -248,6 +248,51 @@ export class ArchivesService {
     };
   }
 
+  async listArchivedPostsByUser(
+    userId: string,
+    options: ListArchivedPostsOptions = {},
+  ) {
+    const page = options.page ?? 1;
+    const pageSize = options.pageSize ?? 20;
+    const skip = (page - 1) * pageSize;
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.archivedPost.findMany({
+        where: {
+          binding: {
+            userId,
+          },
+        },
+        include: {
+          binding: true,
+          mediaItems: {
+            orderBy: {
+              sortOrder: 'asc',
+            },
+          },
+        },
+        orderBy: {
+          archivedAt: 'desc',
+        },
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.archivedPost.count({
+        where: {
+          binding: {
+            userId,
+          },
+        },
+      }),
+    ]);
+
+    return {
+      items,
+      page,
+      pageSize,
+      total,
+    };
+  }
+
   private normalizeViewCount(value: CreateArchivedPostInput['viewCount']) {
     if (value === undefined) {
       return undefined;

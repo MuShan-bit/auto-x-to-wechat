@@ -165,6 +165,72 @@ describe('AppController (e2e)', () => {
       });
   });
 
+  it('/archives returns paginated archive cards scoped to the current user', async () => {
+    const ownBindingResponse = await request(app.getHttpServer())
+      .post('/bindings')
+      .set(internalHeaders)
+      .send({
+        xUserId: 'x-user-archives-own',
+        username: 'archives_owner',
+        displayName: 'Archives Owner',
+        credentialSource: 'WEB_LOGIN',
+        credentialPayload: '{"cookie":"archives-own"}',
+        crawlEnabled: true,
+        crawlIntervalMinutes: 30,
+      })
+      .expect(201);
+
+    const otherBindingResponse = await request(app.getHttpServer())
+      .post('/bindings')
+      .set(otherInternalHeaders)
+      .send({
+        xUserId: 'x-user-archives-other',
+        username: 'archives_other',
+        displayName: 'Archives Other',
+        credentialSource: 'WEB_LOGIN',
+        credentialPayload: '{"cookie":"archives-other"}',
+        crawlEnabled: true,
+        crawlIntervalMinutes: 45,
+      })
+      .expect(201);
+
+    const ownBinding = ownBindingResponse.body as { id: string };
+    const otherBinding = otherBindingResponse.body as { id: string };
+
+    await request(app.getHttpServer())
+      .post(`/bindings/${ownBinding.id}/crawl-now`)
+      .set(internalHeaders)
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/bindings/${otherBinding.id}/crawl-now`)
+      .set(otherInternalHeaders)
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .get('/archives?page=1&pageSize=1')
+      .set(internalHeaders)
+      .expect(200)
+      .expect(({ body }) => {
+        const payload = body as {
+          items: Array<{
+            authorUsername: string;
+            binding: { userId: string };
+          }>;
+          page: number;
+          pageSize: number;
+          total: number;
+        };
+
+        expect(payload.page).toBe(1);
+        expect(payload.pageSize).toBe(1);
+        expect(payload.total).toBe(2);
+        expect(payload.items).toHaveLength(1);
+        expect(payload.items[0]?.binding.userId).toBe('user_demo');
+        expect(payload.items[0]?.authorUsername).toBeTruthy();
+      });
+  });
+
   it('/bindings current/create/disable flow works', async () => {
     const createResponse = await request(app.getHttpServer())
       .post('/bindings')
