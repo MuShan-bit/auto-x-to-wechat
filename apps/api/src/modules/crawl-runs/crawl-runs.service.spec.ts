@@ -1,0 +1,196 @@
+import {
+  BindingStatus,
+  CrawlRunStatus,
+  CrawlTriggerType,
+  CredentialSource,
+  UserRole,
+} from '@prisma/client';
+import { Test, TestingModule } from '@nestjs/testing';
+import { AppModule } from '../../app.module';
+import { CrawlJobsService } from '../crawl-jobs/crawl-jobs.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { CrawlRunsService } from './crawl-runs.service';
+
+describe('CrawlJobsService and CrawlRunsService', () => {
+  let moduleRef: TestingModule;
+  let prisma: PrismaService;
+  let crawlJobsService: CrawlJobsService;
+  let crawlRunsService: CrawlRunsService;
+
+  beforeEach(async () => {
+    moduleRef = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    prisma = moduleRef.get(PrismaService);
+    crawlJobsService = moduleRef.get(CrawlJobsService);
+    crawlRunsService = moduleRef.get(CrawlRunsService);
+
+    await prisma.user.upsert({
+      where: { id: 'crawl_owner' },
+      update: {
+        email: 'crawl_owner@example.com',
+        name: 'Crawl Owner',
+        role: UserRole.USER,
+      },
+      create: {
+        id: 'crawl_owner',
+        email: 'crawl_owner@example.com',
+        name: 'Crawl Owner',
+        role: UserRole.USER,
+      },
+    });
+
+    await prisma.xAccountBinding.deleteMany({
+      where: { userId: 'crawl_owner' },
+    });
+  });
+
+  afterEach(async () => {
+    await moduleRef.close();
+  });
+
+  it('reads crawl job configuration and returns only active due jobs', async () => {
+    const now = new Date('2026-03-19T03:00:00.000Z');
+    const earlyBinding = await createBinding({
+      crawlEnabled: true,
+      nextRunAt: new Date('2026-03-19T02:30:00.000Z'),
+      status: BindingStatus.ACTIVE,
+      username: 'due_early',
+    });
+    const lateBinding = await createBinding({
+      crawlEnabled: true,
+      nextRunAt: new Date('2026-03-19T02:45:00.000Z'),
+      status: BindingStatus.ACTIVE,
+      username: 'due_late',
+    });
+
+    await createBinding({
+      crawlEnabled: true,
+      nextRunAt: new Date('2026-03-19T04:00:00.000Z'),
+      status: BindingStatus.ACTIVE,
+      username: 'future_job',
+    });
+    await createBinding({
+      crawlEnabled: false,
+      nextRunAt: new Date('2026-03-19T02:00:00.000Z'),
+      status: BindingStatus.ACTIVE,
+      username: 'disabled_job',
+    });
+    await createBinding({
+      crawlEnabled: true,
+      nextRunAt: new Date('2026-03-19T02:15:00.000Z'),
+      status: BindingStatus.DISABLED,
+      username: 'invalid_binding',
+    });
+
+    const currentJob = await crawlJobsService.getByBindingId(earlyBinding.id);
+
+    expect(currentJob?.binding.username).toBe('due_early');
+    expect(currentJob?.intervalMinutes).toBe(30);
+
+    const dueJobs = await crawlJobsService.findDueJobs({ now, limit: 10 });
+    const ownDueJobs = dueJobs.filter(
+      (job) => job.binding.userId === 'crawl_owner',
+    );
+
+    expect(ownDueJobs.map((job) => job.binding.id)).toEqual([
+      earlyBinding.id,
+      lateBinding.id,
+    ]);
+  });
+
+  it('creates crawl runs and updates both run status and next schedule', async () => {
+    const binding = await createBinding({
+      crawlEnabled: true,
+      nextRunAt: new Date('2026-03-19T01:00:00.000Z'),
+      status: BindingStatus.ACTIVE,
+      username: 'runner',
+    });
+    const crawlJobId = binding.crawlJob!.id;
+
+    const queuedRun = await crawlRunsService.createQueuedRun({
+      bindingId: binding.id,
+      crawlJobId,
+      triggerType: CrawlTriggerType.SCHEDULED,
+    });
+
+    expect(queuedRun.status).toBe(CrawlRunStatus.QUEUED);
+    expect(queuedRun.crawlJobId).toBe(crawlJobId);
+
+    const startedAt = new Date('2026-03-19T01:05:00.000Z');
+    const runningRun = await crawlRunsService.markRunning(
+      queuedRun.id,
+      startedAt,
+    );
+
+    expect(runningRun.status).toBe(CrawlRunStatus.RUNNING);
+    expect(runningRun.startedAt?.toISOString()).toBe(startedAt.toISOString());
+
+    const finishedAt = new Date('2026-03-19T01:06:00.000Z');
+    const completedRun = await crawlRunsService.markCompleted(queuedRun.id, {
+      status: CrawlRunStatus.SUCCESS,
+      fetchedCount: 20,
+      newCount: 8,
+      skippedCount: 12,
+      failedCount: 0,
+      finishedAt,
+    });
+
+    expect(completedRun.status).toBe(CrawlRunStatus.SUCCESS);
+    expect(completedRun.fetchedCount).toBe(20);
+    expect(completedRun.newCount).toBe(8);
+    expect(completedRun.skippedCount).toBe(12);
+    expect(completedRun.failedCount).toBe(0);
+    expect(completedRun.finishedAt?.toISOString()).toBe(
+      finishedAt.toISOString(),
+    );
+
+    const nextRunAt = new Date('2026-03-19T01:36:00.000Z');
+    const updatedJob = await crawlJobsService.updateSchedule(crawlJobId, {
+      lastRunAt: finishedAt,
+      nextRunAt,
+    });
+
+    expect(updatedJob.lastRunAt?.toISOString()).toBe(finishedAt.toISOString());
+    expect(updatedJob.nextRunAt?.toISOString()).toBe(nextRunAt.toISOString());
+
+    const storedRun = await crawlRunsService.getById(queuedRun.id);
+
+    expect(storedRun?.triggerType).toBe(CrawlTriggerType.SCHEDULED);
+    expect(storedRun?.binding.username).toBe('runner');
+  });
+
+  async function createBinding(input: {
+    crawlEnabled: boolean;
+    nextRunAt: Date;
+    status: BindingStatus;
+    username: string;
+  }) {
+    return prisma.xAccountBinding.create({
+      data: {
+        userId: 'crawl_owner',
+        xUserId: `x-${input.username}`,
+        username: input.username,
+        displayName: `${input.username} display`,
+        status: input.status,
+        credentialSource: CredentialSource.WEB_LOGIN,
+        authPayloadEncrypted: 'encrypted-payload',
+        lastValidatedAt: new Date('2026-03-19T00:00:00.000Z'),
+        crawlEnabled: input.crawlEnabled,
+        crawlIntervalMinutes: 30,
+        nextCrawlAt: input.nextRunAt,
+        crawlJob: {
+          create: {
+            enabled: input.crawlEnabled,
+            intervalMinutes: 30,
+            nextRunAt: input.nextRunAt,
+          },
+        },
+      },
+      include: {
+        crawlJob: true,
+      },
+    });
+  }
+});
