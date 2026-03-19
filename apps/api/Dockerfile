@@ -15,4 +15,4 @@ RUN pnpm --filter api build
 
 EXPOSE 3001
 
-CMD ["sh", "-c", "pnpm --filter api exec prisma migrate deploy --schema prisma/schema.prisma && pnpm --filter api start:prod"]
+CMD ["pnpm", "--filter", "api", "start:prod"]

@@ -20,6 +20,12 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+    command:
+      [
+        "sh",
+        "-c",
+        "pnpm db:migrate:deploy && pnpm --filter api start:prod",
+      ]
     restart: unless-stopped
     depends_on:
       db:

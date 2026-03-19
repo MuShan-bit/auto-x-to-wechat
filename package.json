@@ -13,6 +13,8 @@
     "format": "pnpm -r --if-present format",
     "db:generate": "pnpm --filter api prisma:generate",
     "db:migrate": "pnpm --filter api prisma:migrate",
+    "db:migrate:deploy": "node apps/api/scripts/prisma-migrate-deploy.mjs",
+    "db:migrate:status": "pnpm --filter api exec prisma migrate status --schema prisma/schema.prisma",
     "db:studio": "pnpm --filter api prisma:studio"
   }
 }

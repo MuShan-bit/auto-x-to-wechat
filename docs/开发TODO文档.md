@@ -448,9 +448,10 @@
 依赖：`T102`、`T003`。
 备注：已新增 `apps/web/vercel.json`、`.vercelignore`，并补充 Vercel 域名兜底逻辑与部署说明，可按 Preview / Production 环境分别连接测试或正式 API。
 
-- [ ] `T1007` `P1` 配置生产数据库迁移流程。
+- [x] `T1007` `P1` 配置生产数据库迁移流程。
 完成标准：生产环境可安全执行 Prisma 迁移。
 依赖：`T112`、`T003`。
+备注：已新增 `pnpm db:migrate:status`、`pnpm db:migrate:deploy` 与显式迁移脚本；API 镜像默认只负责启动，生产迁移流程改为独立执行。
 
 - [ ] `T1008` `P1` 编写上线检查清单。
 完成标准：包含环境变量、数据库迁移、回滚策略、日志检查项。
