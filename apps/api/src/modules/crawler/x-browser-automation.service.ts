@@ -109,6 +109,7 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
         };
       }
 
+      await this.navigateToAuthenticatedHome(runtime.page);
       await this.ensureAuthenticatedShell(runtime.page);
 
       const payload = await this.buildCredentialPayload(
@@ -505,6 +506,12 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
       page.waitForSelector('a[data-testid="AppTabBar_Home_Link"]', {
         timeout: 15000,
       }),
+      page.waitForSelector('[data-testid="SideNav_AccountSwitcher_Button"]', {
+        timeout: 15000,
+      }),
+      page.waitForSelector('[data-testid="primaryColumn"]', {
+        timeout: 15000,
+      }),
     ]).catch(() => undefined);
 
     if (this.isLoginUrl(page.url())) {
@@ -530,16 +537,38 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
         return Boolean(
           document.querySelector('article[data-testid="tweet"]') ||
           document.querySelector('a[data-testid="AppTabBar_Profile_Link"]') ||
-          document.querySelector('a[data-testid="AppTabBar_Home_Link"]'),
+          document.querySelector('a[data-testid="AppTabBar_Home_Link"]') ||
+          document.querySelector(
+            '[data-testid="SideNav_AccountSwitcher_Button"]',
+          ) ||
+          document.querySelector('[data-testid="primaryColumn"]'),
         );
       })
       .catch(() => false);
 
     if (!hasAuthenticatedShell) {
+      const diagnostics = await this.capturePageDiagnostics(page);
+
       throw new CrawlerAuthError(
-        'Unable to confirm an authenticated X home timeline session',
+        `Unable to confirm an authenticated X home timeline session (${diagnostics})`,
       );
     }
+  }
+
+  private async navigateToAuthenticatedHome(page: Page) {
+    const pageUrl = page.url();
+
+    if (pageUrl.startsWith(HOME_URL)) {
+      return;
+    }
+
+    await page
+      .goto(HOME_URL, {
+        waitUntil: 'domcontentloaded',
+      })
+      .catch(() => undefined);
+    await page.waitForLoadState('domcontentloaded').catch(() => undefined);
+    await page.waitForTimeout(1200);
   }
 
   private async buildCredentialPayload(
@@ -935,5 +964,37 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
       .replaceAll('&quot;', '"')
       .replaceAll('&#x2F;', '/')
       .replaceAll('&amp;', '&');
+  }
+
+  private async capturePageDiagnostics(page: Page) {
+    try {
+      const snapshot = await page.evaluate(() => {
+        return {
+          title: document.title,
+          href: window.location.href,
+          hasPrimaryColumn: Boolean(
+            document.querySelector('[data-testid="primaryColumn"]'),
+          ),
+          hasAccountSwitcher: Boolean(
+            document.querySelector(
+              '[data-testid="SideNav_AccountSwitcher_Button"]',
+            ),
+          ),
+          hasProfileLink: Boolean(
+            document.querySelector('a[data-testid="AppTabBar_Profile_Link"]'),
+          ),
+          hasHomeLink: Boolean(
+            document.querySelector('a[data-testid="AppTabBar_Home_Link"]'),
+          ),
+          hasTweet: Boolean(
+            document.querySelector('article[data-testid="tweet"]'),
+          ),
+        };
+      });
+
+      return `url=${snapshot.href}; title=${snapshot.title}; primaryColumn=${snapshot.hasPrimaryColumn}; accountSwitcher=${snapshot.hasAccountSwitcher}; profileLink=${snapshot.hasProfileLink}; homeLink=${snapshot.hasHomeLink}; tweet=${snapshot.hasTweet}`;
+    } catch {
+      return `url=${page.url()}`;
+    }
   }
 }
