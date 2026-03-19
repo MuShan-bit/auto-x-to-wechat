@@ -162,10 +162,10 @@ describe('CrawlJobsService and CrawlRunsService', () => {
   });
 
   it('claims due jobs transactionally and prevents duplicate active runs', async () => {
-    const now = new Date('2026-03-19T06:00:00.000Z');
+    const now = new Date('2026-03-19T00:01:00.000Z');
     const binding = await createBinding({
       crawlEnabled: true,
-      nextRunAt: new Date('2026-03-19T05:59:00.000Z'),
+      nextRunAt: new Date('2026-03-19T00:00:00.000Z'),
       status: BindingStatus.ACTIVE,
       username: 'claim_once',
     });
