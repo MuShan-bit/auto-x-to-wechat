@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { apiRequest } from "@/lib/api-client";
+import { apiRequest, getApiErrorMessage } from "@/lib/api-client";
 
 export type BindingActionState = {
   error?: string;
@@ -55,14 +55,6 @@ function getOptionalTextValue(formData: FormData, key: string) {
   return typeof value === "string" ? value : undefined;
 }
 
-function getActionErrorMessage(error: unknown) {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  return "请求失败，请稍后重试。";
-}
-
 export async function upsertBindingAction(
   _previousState: BindingActionState,
   formData: FormData,
@@ -98,7 +90,7 @@ export async function upsertBindingAction(
     } satisfies BindingActionState;
   } catch (error) {
     return {
-      error: getActionErrorMessage(error),
+      error: getApiErrorMessage(error),
     } satisfies BindingActionState;
   }
 }
@@ -136,7 +128,7 @@ export async function updateCrawlConfigAction(
     } satisfies BindingActionState;
   } catch (error) {
     return {
-      error: getActionErrorMessage(error),
+      error: getApiErrorMessage(error),
     } satisfies BindingActionState;
   }
 }
@@ -169,7 +161,7 @@ export async function revalidateBindingAction(
     } satisfies BindingActionState;
   } catch (error) {
     return {
-      error: getActionErrorMessage(error),
+      error: getApiErrorMessage(error),
     } satisfies BindingActionState;
   }
 }
@@ -202,7 +194,7 @@ export async function disableBindingAction(
     } satisfies BindingActionState;
   } catch (error) {
     return {
-      error: getActionErrorMessage(error),
+      error: getApiErrorMessage(error),
     } satisfies BindingActionState;
   }
 }
@@ -238,7 +230,7 @@ export async function triggerManualCrawlAction(
     } satisfies BindingActionState;
   } catch (error) {
     return {
-      error: getActionErrorMessage(error),
+      error: getApiErrorMessage(error),
     } satisfies BindingActionState;
   }
 }
