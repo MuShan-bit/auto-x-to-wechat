@@ -39,6 +39,11 @@ type PersistBindingInput = {
   username: string;
 };
 
+type ActiveCrawlRunSummary = {
+  id: string;
+  status: CrawlRunStatus;
+};
+
 @Injectable()
 export class BindingsService {
   constructor(
@@ -283,15 +288,78 @@ export class BindingsService {
       );
     }
 
+    const runningRun = await this.findRunningCrawlRun(binding.id);
+
+    if (runningRun) {
+      throw new ConflictException(
+        this.buildActiveRunConflictMessage(runningRun, 'running'),
+      );
+    }
+
+    const queuedRun = await this.findQueuedCrawlRun(binding.id);
+
+    if (queuedRun) {
+      return this.crawlExecutionService.processRun(queuedRun.id);
+    }
+
     const [run] = await this.crawlJobsService.claimJobForBinding(binding.id);
 
     if (!run) {
+      const blockingRun =
+        (await this.findRunningCrawlRun(binding.id)) ??
+        (await this.findQueuedCrawlRun(binding.id));
+
+      if (blockingRun?.status === CrawlRunStatus.QUEUED) {
+        return this.crawlExecutionService.processRun(blockingRun.id);
+      }
+
       throw new ConflictException(
-        'A crawl run is already queued or running for this binding',
+        blockingRun
+          ? this.buildActiveRunConflictMessage(blockingRun, 'running')
+          : 'A crawl run is already queued or running for this binding',
       );
     }
 
     return this.crawlExecutionService.processClaimedRun(run);
+  }
+
+  private findQueuedCrawlRun(bindingId: string) {
+    return this.prisma.crawlRun.findFirst({
+      where: {
+        bindingId,
+        status: CrawlRunStatus.QUEUED,
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+  }
+
+  private findRunningCrawlRun(bindingId: string) {
+    return this.prisma.crawlRun.findFirst({
+      where: {
+        bindingId,
+        status: CrawlRunStatus.RUNNING,
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+      orderBy: {
+        startedAt: 'desc',
+      },
+    });
+  }
+
+  private buildActiveRunConflictMessage(
+    run: ActiveCrawlRunSummary,
+    state: 'queued' | 'running',
+  ) {
+    return `A crawl run is already ${state} for this binding. Run ID: ${run.id}`;
   }
 
   private async persistBinding(

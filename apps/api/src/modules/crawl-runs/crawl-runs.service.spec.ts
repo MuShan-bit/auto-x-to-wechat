@@ -124,8 +124,9 @@ describe('CrawlJobsService and CrawlRunsService', () => {
       startedAt,
     );
 
-    expect(runningRun.status).toBe(CrawlRunStatus.RUNNING);
-    expect(runningRun.startedAt?.toISOString()).toBe(startedAt.toISOString());
+    expect(runningRun).not.toBeNull();
+    expect(runningRun!.status).toBe(CrawlRunStatus.RUNNING);
+    expect(runningRun!.startedAt?.toISOString()).toBe(startedAt.toISOString());
 
     const finishedAt = new Date('2026-03-19T01:06:00.000Z');
     const completedRun = await crawlRunsService.markCompleted(queuedRun.id, {
@@ -159,6 +160,33 @@ describe('CrawlJobsService and CrawlRunsService', () => {
 
     expect(storedRun?.triggerType).toBe(CrawlTriggerType.SCHEDULED);
     expect(storedRun?.binding.username).toBe('runner');
+  });
+
+  it('marks a queued run as running only once', async () => {
+    const binding = await createBinding({
+      crawlEnabled: true,
+      nextRunAt: new Date('2026-03-19T01:00:00.000Z'),
+      status: BindingStatus.ACTIVE,
+      username: 'single_runner',
+    });
+    const queuedRun = await crawlRunsService.createQueuedRun({
+      bindingId: binding.id,
+      crawlJobId: binding.crawlJob!.id,
+      triggerType: CrawlTriggerType.MANUAL,
+    });
+    const startedAt = new Date('2026-03-19T01:05:00.000Z');
+
+    const [firstAttempt, secondAttempt] = await Promise.all([
+      crawlRunsService.markRunning(queuedRun.id, startedAt),
+      crawlRunsService.markRunning(queuedRun.id, startedAt),
+    ]);
+
+    expect([firstAttempt, secondAttempt].filter(Boolean)).toHaveLength(1);
+
+    const storedRun = await crawlRunsService.getExecutionRunById(queuedRun.id);
+
+    expect(storedRun?.status).toBe(CrawlRunStatus.RUNNING);
+    expect(storedRun?.startedAt?.toISOString()).toBe(startedAt.toISOString());
   });
 
   it('claims due jobs transactionally and prevents duplicate active runs', async () => {

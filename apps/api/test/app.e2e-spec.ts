@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import { CrawlTriggerType, UserRole } from '@prisma/client';
+import { CrawlRunStatus, CrawlTriggerType, UserRole } from '@prisma/client';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { PrismaService } from './../src/modules/prisma/prisma.service';
@@ -588,6 +588,110 @@ describe('AppController (e2e)', () => {
     expect(
       runPosts.filter((item) => item.actionType === 'SKIPPED'),
     ).toHaveLength(2);
+  });
+
+  it('/bindings/:id/crawl-now resumes an existing queued crawl run', async () => {
+    const createResponse = await request(app.getHttpServer())
+      .post('/bindings')
+      .set(internalHeaders)
+      .send({
+        xUserId: 'x-user-queued',
+        username: 'queued_owner',
+        displayName: 'Queued Owner',
+        credentialSource: 'WEB_LOGIN',
+        credentialPayload: '{"cookie":"queued"}',
+        crawlEnabled: false,
+        crawlIntervalMinutes: 30,
+      })
+      .expect(201);
+
+    const binding = createResponse.body as {
+      crawlJob: {
+        id: string;
+      };
+      id: string;
+    };
+
+    const queuedRun = await prisma.crawlRun.create({
+      data: {
+        bindingId: binding.id,
+        crawlJobId: binding.crawlJob.id,
+        triggerType: CrawlTriggerType.MANUAL,
+        status: CrawlRunStatus.QUEUED,
+      },
+    });
+
+    await request(app.getHttpServer())
+      .post(`/bindings/${binding.id}/crawl-now`)
+      .set(internalHeaders)
+      .expect(201)
+      .expect(({ body }) => {
+        const payload = body as {
+          id: string;
+          status: string;
+          triggerType: string;
+        };
+
+        expect(payload.id).toBe(queuedRun.id);
+        expect(payload.status).toBe('SUCCESS');
+        expect(payload.triggerType).toBe(CrawlTriggerType.MANUAL);
+      });
+
+    const storedRuns = await prisma.crawlRun.findMany({
+      where: {
+        bindingId: binding.id,
+      },
+    });
+
+    expect(storedRuns).toHaveLength(1);
+    expect(storedRuns[0]?.id).toBe(queuedRun.id);
+    expect(storedRuns[0]?.status).toBe(CrawlRunStatus.SUCCESS);
+  });
+
+  it('/bindings/:id/crawl-now returns the active running run in conflict details', async () => {
+    const createResponse = await request(app.getHttpServer())
+      .post('/bindings')
+      .set(internalHeaders)
+      .send({
+        xUserId: 'x-user-running',
+        username: 'running_owner',
+        displayName: 'Running Owner',
+        credentialSource: 'WEB_LOGIN',
+        credentialPayload: '{"cookie":"running"}',
+        crawlEnabled: true,
+        crawlIntervalMinutes: 30,
+      })
+      .expect(201);
+
+    const binding = createResponse.body as {
+      crawlJob: {
+        id: string;
+      };
+      id: string;
+    };
+
+    const runningRun = await prisma.crawlRun.create({
+      data: {
+        bindingId: binding.id,
+        crawlJobId: binding.crawlJob.id,
+        triggerType: CrawlTriggerType.SCHEDULED,
+        status: CrawlRunStatus.RUNNING,
+        startedAt: new Date('2026-03-19T06:00:00.000Z'),
+      },
+    });
+
+    await request(app.getHttpServer())
+      .post(`/bindings/${binding.id}/crawl-now`)
+      .set(internalHeaders)
+      .expect(409)
+      .expect(({ body }) => {
+        const payload = body as {
+          message: string;
+        };
+
+        expect(payload.message).toContain('already running');
+        expect(payload.message).toContain(runningRun.id);
+      });
   });
 
   it('/bindings enforces per-user isolation across read and write operations', async () => {

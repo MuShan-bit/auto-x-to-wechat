@@ -52,7 +52,23 @@ export class CrawlExecutionService {
       return queuedRun;
     }
 
-    const runningRun = await this.crawlRunsService.markRunning(queuedRun.id);
+    const runningRun = await this.crawlRunsService.markRunning(
+      queuedRun.id,
+      processedAt,
+    );
+
+    if (!runningRun) {
+      const currentRun = await this.crawlRunsService.getExecutionRunById(
+        queuedRun.id,
+      );
+
+      if (!currentRun) {
+        throw new NotFoundException('Crawl run not found');
+      }
+
+      return currentRun;
+    }
+
     const binding = runningRun.binding;
     const now = processedAt;
 

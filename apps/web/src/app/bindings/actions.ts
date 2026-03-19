@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { apiRequest, getApiErrorMessage } from "@/lib/api-client";
+import { ApiRequestError, apiRequest, getApiErrorMessage } from "@/lib/api-client";
 
 export type BindingActionState = {
   actionHref?: string;
@@ -61,6 +61,30 @@ function getOptionalTextValue(formData: FormData, key: string) {
   const value = formData.get(key);
 
   return typeof value === "string" ? value : undefined;
+}
+
+function buildManualCrawlErrorState(error: unknown): BindingActionState {
+  const message = getApiErrorMessage(error);
+
+  if (!(error instanceof ApiRequestError) || error.status !== 409) {
+    return {
+      error: message,
+    } satisfies BindingActionState;
+  }
+
+  const matchedRunId = message.match(/run id:\s*([a-z0-9]+)/i)?.[1];
+
+  if (!matchedRunId) {
+    return {
+      error: message,
+    } satisfies BindingActionState;
+  }
+
+  return {
+    actionHref: `/runs/${matchedRunId}`,
+    actionLabel: "查看当前抓取记录",
+    error: message,
+  } satisfies BindingActionState;
 }
 
 export async function upsertBindingAction(
@@ -275,8 +299,6 @@ export async function triggerManualCrawlAction(
       success: `手动抓取已执行，当前状态：${run.status}（${run.triggerType}）。`,
     } satisfies BindingActionState;
   } catch (error) {
-    return {
-      error: getApiErrorMessage(error),
-    } satisfies BindingActionState;
+    return buildManualCrawlErrorState(error);
   }
 }

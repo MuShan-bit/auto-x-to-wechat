@@ -100,13 +100,24 @@ export class CrawlRunsService {
     });
   }
 
-  markRunning(id: string, startedAt = new Date()) {
-    return this.prisma.crawlRun.update({
-      where: { id },
+  async markRunning(id: string, startedAt = new Date()) {
+    const result = await this.prisma.crawlRun.updateMany({
+      where: {
+        id,
+        status: CrawlRunStatus.QUEUED,
+      },
       data: {
         status: CrawlRunStatus.RUNNING,
         startedAt,
       },
+    });
+
+    if (result.count === 0) {
+      return null;
+    }
+
+    return this.prisma.crawlRun.findUnique({
+      where: { id },
       ...crawlRunExecutionArgs,
     });
   }

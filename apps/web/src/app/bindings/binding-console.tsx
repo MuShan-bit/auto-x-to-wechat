@@ -150,8 +150,23 @@ function FormFeedback({
 }: {
   state: BindingActionState;
 }) {
+  const actionLink =
+    state.actionHref && state.actionLabel ? (
+      <Link
+        href={state.actionHref}
+        className="mt-3 inline-flex h-8 items-center justify-center rounded-full bg-white px-3 text-xs font-medium transition-colors hover:bg-slate-100"
+      >
+        {state.actionLabel}
+      </Link>
+    ) : null;
+
   if (state.error) {
-    return <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600">{state.error}</p>;
+    return (
+      <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600">
+        <p>{state.error}</p>
+        {actionLink}
+      </div>
+    );
   }
 
   if (state.success) {
