@@ -861,6 +861,78 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
         return 'POST';
       }
 
+      function listNestedStatusLinks(article: Element, permalink: string) {
+        return Array.from(article.querySelectorAll('a[href*="/status/"]'))
+          .map((item) => item.getAttribute('href') ?? '')
+          .filter((href) => href.length > 0 && href !== permalink);
+      }
+
+      function parseStatusHref(href?: string) {
+        if (!href) {
+          return {};
+        }
+
+        const match = href.match(/\/([^/?]+)\/status\/([^/?]+)/);
+
+        if (!match) {
+          return {
+            targetUrl: href,
+          };
+        }
+
+        return {
+          targetUrl: href,
+          targetAuthorUsername: match[1],
+          targetXPostId: match[2],
+        };
+      }
+
+      function inferRelations(
+        article: Element,
+        postType: PostType,
+        permalink: string,
+        xPostId: string,
+        username: string,
+        entities: ReturnType<typeof inferEntities>,
+      ) {
+        if (postType === 'QUOTE') {
+          const quotedStatusHref = listNestedStatusLinks(article, permalink)[0];
+
+          if (!quotedStatusHref) {
+            return [];
+          }
+
+          return [
+            {
+              relationType: 'QUOTE' as const,
+              ...parseStatusHref(quotedStatusHref),
+            },
+          ];
+        }
+
+        if (postType === 'REPLY') {
+          return [
+            {
+              relationType: 'REPLY' as const,
+              targetAuthorUsername: entities.mentions[0]?.username,
+            },
+          ];
+        }
+
+        if (postType === 'REPOST') {
+          return [
+            {
+              relationType: 'REPOST' as const,
+              targetXPostId: xPostId,
+              targetUrl: permalink,
+              targetAuthorUsername: username,
+            },
+          ];
+        }
+
+        return [];
+      }
+
       return Array.from(
         document.querySelectorAll('article[data-testid="tweet"]'),
       )
@@ -928,11 +1000,12 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
             }),
           );
           const entities = inferEntities(rawText);
+          const postType = detectPostType(article, rawText, permalink);
 
           return {
             xPostId,
             postUrl: permalink,
-            postType: detectPostType(article, rawText, permalink),
+            postType,
             author: {
               username,
               displayName,
@@ -945,6 +1018,14 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
               undefined,
             entities,
             media: [...imageMedia, ...videoMedia],
+            relations: inferRelations(
+              article,
+              postType,
+              permalink,
+              xPostId,
+              username,
+              entities,
+            ),
             metrics: {
               replyCount: parseMetric(article, '[data-testid="reply"]'),
               repostCount:

@@ -173,6 +173,13 @@ export class RealFeedCrawlerAdapter implements FeedCrawlerAdapter {
           altText: this.normalizeOptionalString(item.altText),
         }))
         .filter((item) => item.sourceUrl.length > 0),
+      relations: (post.relations ?? []).map((item) => ({
+        ...item,
+        targetAuthorUsername: this.normalizeOptionalString(
+          item.targetAuthorUsername,
+        )?.replace(/^@+/, ''),
+        targetUrl: this.normalizeUrl(item.targetUrl),
+      })),
       rawPayload: post.rawPayload ?? {},
     };
   }

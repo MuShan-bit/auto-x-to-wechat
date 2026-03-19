@@ -1,4 +1,4 @@
-import { MediaType, PostType } from '@prisma/client';
+import { MediaType, PostType, RelationType } from '@prisma/client';
 
 export type BindingProfile = {
   avatarUrl?: string;
@@ -29,6 +29,14 @@ export type PostEntities = {
   hashtags: PostHashtagEntity[];
   mentions: PostMentionEntity[];
   urls: PostUrlEntity[];
+};
+
+export type PostRelation = {
+  relationType: RelationType;
+  snapshotJson?: Record<string, unknown>;
+  targetAuthorUsername?: string;
+  targetUrl?: string;
+  targetXPostId?: string;
 };
 
 export type RawFeedPostAuthor = {
@@ -63,6 +71,7 @@ export type RawFeedPost = {
   postUrl: string;
   rawPayload?: Record<string, unknown>;
   rawText: string;
+  relations?: PostRelation[];
   sourceCreatedAt: string;
   xPostId: string;
 };
@@ -85,6 +94,7 @@ export type NormalizedPost = {
   quoteCount?: number;
   rawPayloadJson: Record<string, unknown>;
   rawText: string;
+  relations: PostRelation[];
   replyCount?: number;
   repostCount?: number;
   sourceCreatedAt: string;

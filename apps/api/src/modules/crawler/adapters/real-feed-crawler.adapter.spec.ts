@@ -1,4 +1,4 @@
-import { MediaType, PostType } from '@prisma/client';
+import { MediaType, PostType, RelationType } from '@prisma/client';
 import type { BindingProfile, RawFeedResponse } from '../crawler.types';
 import { XBrowserAutomationService } from '../x-browser-automation.service';
 import { RealFeedCrawlerAdapter } from './real-feed-crawler.adapter';
@@ -125,6 +125,14 @@ describe('RealFeedCrawlerAdapter', () => {
               altText: ' preview ',
             },
           ],
+          relations: [
+            {
+              relationType: RelationType.QUOTE,
+              targetXPostId: 'quoted-001',
+              targetUrl: '/friend/status/quoted-001',
+              targetAuthorUsername: ' @friend ',
+            },
+          ],
           metrics: {
             viewCount: 42,
           },
@@ -176,6 +184,14 @@ describe('RealFeedCrawlerAdapter', () => {
             sourceUrl: 'https://images.example.com/post-001.png',
             previewUrl: 'https://x.com/media/post-001-preview.png',
             altText: 'preview',
+          },
+        ],
+        relations: [
+          {
+            relationType: RelationType.QUOTE,
+            targetXPostId: 'quoted-001',
+            targetUrl: 'https://x.com/friend/status/quoted-001',
+            targetAuthorUsername: 'friend',
           },
         ],
         viewCount: BigInt(42),

@@ -1,5 +1,8 @@
-import { type MediaType } from '@prisma/client';
-import { type NormalizedPost } from '../crawler/crawler.types';
+import { type MediaType, type RelationType } from '@prisma/client';
+import {
+  type NormalizedPost,
+  type PostRelation,
+} from '../crawler/crawler.types';
 
 export type RichTextNode =
   | {
@@ -37,8 +40,18 @@ export type RichTextMediaBlock = {
   width?: number;
 };
 
+export type RichTextRelationBlock = {
+  relationType: RelationType;
+  targetAuthorUsername?: string;
+  targetUrl?: string;
+  targetXPostId?: string;
+  type: 'relation';
+};
+
 export type RichTextDocument = {
-  blocks: Array<RichTextParagraphBlock | RichTextMediaBlock>;
+  blocks: Array<
+    RichTextParagraphBlock | RichTextRelationBlock | RichTextMediaBlock
+  >;
   version: 1;
 };
 
@@ -166,6 +179,44 @@ function buildParagraphChildren(
   return children.length > 0 ? children : [{ type: 'text', text }];
 }
 
+function buildFallbackRelations(post: NormalizedPost): PostRelation[] {
+  if (post.relations.length > 0) {
+    return post.relations;
+  }
+
+  if (post.postType === 'REPLY') {
+    return [
+      {
+        relationType: 'REPLY',
+        targetAuthorUsername: post.entities.mentions[0]?.username,
+      },
+    ];
+  }
+
+  if (post.postType === 'REPOST') {
+    return [
+      {
+        relationType: 'REPOST',
+        targetAuthorUsername: post.author.username,
+        targetUrl: post.postUrl,
+        targetXPostId: post.xPostId,
+      },
+    ];
+  }
+
+  return [];
+}
+
+function buildRelationBlocks(post: NormalizedPost): RichTextRelationBlock[] {
+  return buildFallbackRelations(post).map((relation) => ({
+    type: 'relation',
+    relationType: relation.relationType,
+    targetXPostId: relation.targetXPostId,
+    targetUrl: relation.targetUrl,
+    targetAuthorUsername: relation.targetAuthorUsername,
+  }));
+}
+
 export function convertNormalizedPostToRichText(
   post: NormalizedPost,
 ): RichTextDocument {
@@ -191,6 +242,8 @@ export function convertNormalizedPostToRichText(
 
     paragraphOffset += line.length + 1;
   }
+
+  blocks.push(...buildRelationBlocks(post));
 
   for (const media of post.media) {
     blocks.push({

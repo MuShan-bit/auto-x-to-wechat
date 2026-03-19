@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { MediaType, PostType } from '@prisma/client';
+import { MediaType, PostType, RelationType } from '@prisma/client';
 import { normalizeRawFeedPosts } from '../crawler-normalizer';
 import { retryCrawlerOperation } from '../crawler-retry';
 import type {
@@ -185,6 +185,17 @@ export class MockFeedCrawlerAdapter implements FeedCrawlerAdapter {
             urls: [],
           },
           media: [],
+          relations: [
+            {
+              relationType: RelationType.QUOTE,
+              targetXPostId: 'mock-post-quoted-001',
+              targetUrl: 'https://x.com/openai_news/status/mock-post-quoted-001',
+              targetAuthorUsername: 'openai_news',
+              snapshotJson: {
+                previewText: 'Quoted recommendation feed item',
+              },
+            },
+          ],
           metrics: {
             replyCount: 2,
             repostCount: 5,

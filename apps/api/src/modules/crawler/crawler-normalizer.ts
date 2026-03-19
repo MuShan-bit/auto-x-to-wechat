@@ -1,6 +1,7 @@
 import type {
   NormalizedPost,
   PostEntities,
+  PostRelation,
   RawFeedResponse,
 } from './crawler.types';
 
@@ -14,6 +15,12 @@ function normalizeEntities(
   };
 }
 
+function normalizeRelations(
+  relations: RawFeedResponse['posts'][number]['relations'],
+): PostRelation[] {
+  return relations ?? [];
+}
+
 export function normalizeRawFeedPosts(raw: RawFeedResponse): NormalizedPost[] {
   return raw.posts.map((post) => ({
     xPostId: post.xPostId,
@@ -25,6 +32,7 @@ export function normalizeRawFeedPosts(raw: RawFeedResponse): NormalizedPost[] {
     language: post.language,
     entities: normalizeEntities(post.entities),
     media: post.media ?? [],
+    relations: normalizeRelations(post.relations),
     replyCount: post.metrics?.replyCount,
     repostCount: post.metrics?.repostCount,
     quoteCount: post.metrics?.quoteCount,

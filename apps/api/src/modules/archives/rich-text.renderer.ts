@@ -1,5 +1,6 @@
 import {
   type RichTextDocument,
+  type RichTextRelationBlock,
   type RichTextNode,
 } from './rich-text.converter';
 
@@ -43,21 +44,48 @@ function renderInlineNode(node: RichTextNode) {
   }
 }
 
+function getRelationSummary(block: RichTextRelationBlock) {
+  const relationLabel =
+    block.relationType === 'QUOTE'
+      ? '引用帖子'
+      : block.relationType === 'REPOST'
+        ? '转发帖子'
+        : '回复帖子';
+
+  if (!block.targetAuthorUsername) {
+    return relationLabel;
+  }
+
+  return `${relationLabel} @${escapeHtml(block.targetAuthorUsername)}`;
+}
+
+function renderRelationBlock(block: RichTextRelationBlock) {
+  const relationLink = block.targetUrl
+    ? `<a data-block-link="relation" href="${sanitizeUrl(block.targetUrl)}" target="_blank" rel="noreferrer noopener">查看原帖</a>`
+    : '';
+
+  return `<aside data-block-type="relation" data-relation-type="${block.relationType}"><p>${getRelationSummary(block)}</p>${relationLink}</aside>`;
+}
+
 export function renderRichTextToHtml(document: RichTextDocument) {
   return document.blocks
     .map((block) => {
-      if (block.type === 'paragraph') {
-        return `<p>${block.children.map((node) => renderInlineNode(node)).join('')}</p>`;
+      switch (block.type) {
+        case 'paragraph':
+          return `<p>${block.children.map((node) => renderInlineNode(node)).join('')}</p>`;
+        case 'relation':
+          return renderRelationBlock(block);
+        case 'media': {
+          const sourceUrl = sanitizeUrl(block.sourceUrl);
+          const previewUrl = sanitizeUrl(block.previewUrl);
+
+          if (block.mediaType === 'VIDEO') {
+            return `<figure data-block-type="media" data-media-type="${block.mediaType}"><video controls preload="metadata" src="${sourceUrl}" poster="${previewUrl}"></video></figure>`;
+          }
+
+          return `<figure data-block-type="media" data-media-type="${block.mediaType}"><img src="${sourceUrl}" alt="" loading="lazy" /></figure>`;
+        }
       }
-
-      const sourceUrl = sanitizeUrl(block.sourceUrl);
-      const previewUrl = sanitizeUrl(block.previewUrl);
-
-      if (block.mediaType === 'VIDEO') {
-        return `<figure data-block-type="media" data-media-type="${block.mediaType}"><video controls preload="metadata" src="${sourceUrl}" poster="${previewUrl}"></video></figure>`;
-      }
-
-      return `<figure data-block-type="media" data-media-type="${block.mediaType}"><img src="${sourceUrl}" alt="" loading="lazy" /></figure>`;
     })
     .join('');
 }

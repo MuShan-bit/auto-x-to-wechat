@@ -120,6 +120,16 @@ export class CrawlExecutionService {
                 width: media.width,
                 height: media.height,
               })),
+              relations: post.relations.map((relation) => ({
+                relationType: relation.relationType,
+                targetXPostId: relation.targetXPostId,
+                targetUrl: relation.targetUrl,
+                targetAuthorUsername: relation.targetAuthorUsername,
+                snapshotJson:
+                  relation.snapshotJson === undefined
+                    ? undefined
+                    : this.toInputJsonValue(relation.snapshotJson),
+              })),
             });
 
           await this.crawlRunPostsService.createRecord({
