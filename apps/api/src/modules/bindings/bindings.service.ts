@@ -3,6 +3,7 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { CrawlExecutionService } from '../crawl-jobs/crawl-execution.service';
@@ -11,9 +12,27 @@ import { CredentialCryptoService } from '../crypto/credential-crypto.service';
 import { FEED_CRAWLER_ADAPTER } from '../crawler/crawler.constants';
 import type { FeedCrawlerAdapter } from '../crawler/crawler.types';
 import { CrawlerAuthError } from '../crawler/errors/crawler-adapter.error';
+import type { RealBrowserCredentialPayload } from '../crawler/x-browser.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpsertBindingDto } from './dto/upsert-binding.dto';
 import { UpdateCrawlConfigDto } from './dto/update-crawl-config.dto';
+
+type BindingRecordWithJob = Prisma.XAccountBindingGetPayload<{
+  include: {
+    crawlJob: true;
+  };
+}>;
+
+type PersistBindingInput = {
+  avatarUrl?: string;
+  crawlEnabled: boolean;
+  crawlIntervalMinutes: number;
+  credentialPayload: string;
+  credentialSource: CredentialSource;
+  displayName?: string;
+  xUserId: string;
+  username: string;
+};
 
 @Injectable()
 export class BindingsService {
@@ -27,89 +46,68 @@ export class BindingsService {
   ) {}
 
   async getCurrent(userId: string) {
-    return this.prisma.xAccountBinding.findFirst({
-      where: { userId },
-      include: { crawlJob: true },
-      orderBy: { updatedAt: 'desc' },
-    });
+    return this.findLatestBinding(userId);
   }
 
   async upsertForUser(userId: string, dto: UpsertBindingDto) {
-    const encryptedPayload = this.credentialCryptoService.encrypt(
-      dto.credentialPayload,
-    );
-    const nextRunAt = dto.crawlEnabled
-      ? this.buildNextRunAt(dto.crawlIntervalMinutes)
-      : null;
-    const existingBinding = await this.prisma.xAccountBinding.findFirst({
-      where: { userId },
-      orderBy: { updatedAt: 'desc' },
-    });
+    const existingBinding = await this.findLatestBinding(userId);
 
-    const data: Prisma.XAccountBindingUncheckedCreateInput = {
+    return this.persistBinding(
       userId,
-      xUserId: dto.xUserId,
-      username: dto.username,
-      displayName: dto.displayName,
-      avatarUrl: dto.avatarUrl,
-      status: BindingStatus.ACTIVE,
-      credentialSource: dto.credentialSource ?? CredentialSource.WEB_LOGIN,
-      authPayloadEncrypted: encryptedPayload,
-      lastValidatedAt: new Date(),
-      crawlEnabled: dto.crawlEnabled,
-      crawlIntervalMinutes: dto.crawlIntervalMinutes,
-      nextCrawlAt: nextRunAt,
-    };
-
-    if (!existingBinding) {
-      return this.prisma.xAccountBinding.create({
-        data: {
-          ...data,
-          crawlJob: {
-            create: {
-              enabled: dto.crawlEnabled,
-              intervalMinutes: dto.crawlIntervalMinutes,
-              nextRunAt,
-            },
-          },
-        },
-        include: { crawlJob: true },
-      });
-    }
-
-    return this.prisma.xAccountBinding.update({
-      where: { id: existingBinding.id },
-      data: {
+      {
         xUserId: dto.xUserId,
         username: dto.username,
         displayName: dto.displayName,
         avatarUrl: dto.avatarUrl,
-        status: BindingStatus.ACTIVE,
-        credentialSource: dto.credentialSource,
-        authPayloadEncrypted: encryptedPayload,
-        lastValidatedAt: new Date(),
+        credentialSource: dto.credentialSource ?? CredentialSource.WEB_LOGIN,
+        credentialPayload: dto.credentialPayload,
         crawlEnabled: dto.crawlEnabled,
         crawlIntervalMinutes: dto.crawlIntervalMinutes,
-        nextCrawlAt: nextRunAt,
-        crawlJob: existingBinding.id
-          ? {
-              upsert: {
-                create: {
-                  enabled: dto.crawlEnabled,
-                  intervalMinutes: dto.crawlIntervalMinutes,
-                  nextRunAt,
-                },
-                update: {
-                  enabled: dto.crawlEnabled,
-                  intervalMinutes: dto.crawlIntervalMinutes,
-                  nextRunAt,
-                },
-              },
-            }
-          : undefined,
       },
-      include: { crawlJob: true },
-    });
+      existingBinding,
+    );
+  }
+
+  async upsertFromBrowserLogin(
+    userId: string,
+    payload: RealBrowserCredentialPayload,
+  ) {
+    const existingBinding = await this.findLatestBinding(userId);
+    const normalizedPayload = {
+      ...payload,
+      xUserId: payload.xUserId ?? existingBinding?.xUserId ?? payload.username,
+      username: payload.username ?? existingBinding?.username,
+      displayName:
+        payload.displayName ?? existingBinding?.displayName ?? undefined,
+      avatarUrl: payload.avatarUrl ?? existingBinding?.avatarUrl ?? undefined,
+    } satisfies RealBrowserCredentialPayload;
+
+    if (!normalizedPayload.username || !normalizedPayload.xUserId) {
+      throw new InternalServerErrorException(
+        'Unable to resolve X account identity from browser login payload',
+      );
+    }
+
+    const crawlEnabled =
+      existingBinding?.status === BindingStatus.DISABLED
+        ? true
+        : (existingBinding?.crawlEnabled ?? true);
+    const crawlIntervalMinutes = existingBinding?.crawlIntervalMinutes ?? 60;
+
+    return this.persistBinding(
+      userId,
+      {
+        xUserId: normalizedPayload.xUserId,
+        username: normalizedPayload.username,
+        displayName: normalizedPayload.displayName,
+        avatarUrl: normalizedPayload.avatarUrl,
+        credentialSource: CredentialSource.WEB_LOGIN,
+        credentialPayload: JSON.stringify(normalizedPayload),
+        crawlEnabled,
+        crawlIntervalMinutes,
+      },
+      existingBinding,
+    );
   }
 
   async updateCrawlConfig(
@@ -245,6 +243,84 @@ export class BindingsService {
     return this.crawlExecutionService.processClaimedRun(run);
   }
 
+  private async persistBinding(
+    userId: string,
+    input: PersistBindingInput,
+    existingBinding?: BindingRecordWithJob | null,
+  ) {
+    const encryptedPayload = this.credentialCryptoService.encrypt(
+      input.credentialPayload,
+    );
+    const nextRunAt = input.crawlEnabled
+      ? this.buildNextRunAt(input.crawlIntervalMinutes)
+      : null;
+
+    const data: Prisma.XAccountBindingUncheckedCreateInput = {
+      userId,
+      xUserId: input.xUserId,
+      username: input.username,
+      displayName: input.displayName,
+      avatarUrl: input.avatarUrl,
+      status: BindingStatus.ACTIVE,
+      credentialSource: input.credentialSource,
+      authPayloadEncrypted: encryptedPayload,
+      lastValidatedAt: new Date(),
+      crawlEnabled: input.crawlEnabled,
+      crawlIntervalMinutes: input.crawlIntervalMinutes,
+      nextCrawlAt: nextRunAt,
+      lastErrorMessage: null,
+    };
+
+    if (!existingBinding) {
+      return this.prisma.xAccountBinding.create({
+        data: {
+          ...data,
+          crawlJob: {
+            create: {
+              enabled: input.crawlEnabled,
+              intervalMinutes: input.crawlIntervalMinutes,
+              nextRunAt,
+            },
+          },
+        },
+        include: { crawlJob: true },
+      });
+    }
+
+    return this.prisma.xAccountBinding.update({
+      where: { id: existingBinding.id },
+      data: {
+        xUserId: data.xUserId,
+        username: data.username,
+        displayName: data.displayName,
+        avatarUrl: data.avatarUrl,
+        status: BindingStatus.ACTIVE,
+        credentialSource: input.credentialSource,
+        authPayloadEncrypted: encryptedPayload,
+        lastValidatedAt: new Date(),
+        crawlEnabled: input.crawlEnabled,
+        crawlIntervalMinutes: input.crawlIntervalMinutes,
+        nextCrawlAt: nextRunAt,
+        lastErrorMessage: null,
+        crawlJob: {
+          upsert: {
+            create: {
+              enabled: input.crawlEnabled,
+              intervalMinutes: input.crawlIntervalMinutes,
+              nextRunAt,
+            },
+            update: {
+              enabled: input.crawlEnabled,
+              intervalMinutes: input.crawlIntervalMinutes,
+              nextRunAt,
+            },
+          },
+        },
+      },
+      include: { crawlJob: true },
+    });
+  }
+
   private async assertOwnership(userId: string, bindingId: string) {
     const binding = await this.prisma.xAccountBinding.findFirst({
       where: {
@@ -258,6 +334,14 @@ export class BindingsService {
     }
 
     return binding;
+  }
+
+  private findLatestBinding(userId: string) {
+    return this.prisma.xAccountBinding.findFirst({
+      where: { userId },
+      include: { crawlJob: true },
+      orderBy: { updatedAt: 'desc' },
+    });
   }
 
   private buildNextRunAt(intervalMinutes: number) {

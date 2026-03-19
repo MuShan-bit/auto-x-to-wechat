@@ -13,6 +13,7 @@ import { CredentialCryptoService } from '../crypto/credential-crypto.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { XBrowserAutomationService } from '../crawler/x-browser-automation.service';
 import type { InteractiveLoginRuntime } from '../crawler/x-browser.types';
+import { BindingsService } from './bindings.service';
 
 const X_LOGIN_URL = 'https://x.com/i/flow/login';
 
@@ -25,6 +26,7 @@ export class BindingBrowserSessionsService implements OnModuleDestroy {
     private readonly configService: ConfigService,
     private readonly credentialCryptoService: CredentialCryptoService,
     private readonly xBrowserAutomationService: XBrowserAutomationService,
+    private readonly bindingsService: BindingsService,
   ) {}
 
   async onModuleDestroy() {
@@ -230,28 +232,76 @@ export class BindingBrowserSessionsService implements OnModuleDestroy {
       case 'AUTHENTICATED':
         await this.closeRuntime(session.id);
 
-        return this.prisma.bindingBrowserSession.update({
-          where: {
-            id: session.id,
-          },
-          data: {
-            status: BindingBrowserSessionStatus.SUCCESS,
-            completedAt: new Date(),
-            capturedPayloadEncrypted: this.credentialCryptoService.encrypt(
-              JSON.stringify(state.payload),
-            ),
-            xUserId: state.profile.xUserId ?? state.payload.xUserId ?? null,
-            username: state.profile.username ?? state.payload.username ?? null,
-            displayName:
-              state.profile.displayName ?? state.payload.displayName ?? null,
-            avatarUrl:
-              state.profile.avatarUrl ?? state.payload.avatarUrl ?? null,
-            errorMessage: null,
-          },
-          include: {
-            binding: true,
-          },
-        });
+        return this.completeAuthenticatedSession(
+          session.id,
+          session.userId,
+          state,
+        );
+    }
+  }
+
+  private async completeAuthenticatedSession(
+    sessionId: string,
+    userId: string,
+    state: Extract<
+      Awaited<ReturnType<XBrowserAutomationService['inspectInteractiveLogin']>>,
+      {
+        status: 'AUTHENTICATED';
+      }
+    >,
+  ) {
+    const capturedPayloadEncrypted = this.credentialCryptoService.encrypt(
+      JSON.stringify(state.payload),
+    );
+
+    try {
+      const binding = await this.bindingsService.upsertFromBrowserLogin(
+        userId,
+        state.payload,
+      );
+
+      return this.prisma.bindingBrowserSession.update({
+        where: {
+          id: sessionId,
+        },
+        data: {
+          status: BindingBrowserSessionStatus.SUCCESS,
+          completedAt: new Date(),
+          bindingId: binding.id,
+          capturedPayloadEncrypted,
+          xUserId: binding.xUserId,
+          username: binding.username,
+          displayName: binding.displayName,
+          avatarUrl: binding.avatarUrl,
+          errorMessage: null,
+        },
+        include: {
+          binding: true,
+        },
+      });
+    } catch (error) {
+      return this.prisma.bindingBrowserSession.update({
+        where: {
+          id: sessionId,
+        },
+        data: {
+          status: BindingBrowserSessionStatus.FAILED,
+          completedAt: new Date(),
+          capturedPayloadEncrypted,
+          xUserId: state.profile.xUserId ?? state.payload.xUserId ?? null,
+          username: state.profile.username ?? state.payload.username ?? null,
+          displayName:
+            state.profile.displayName ?? state.payload.displayName ?? null,
+          avatarUrl: state.profile.avatarUrl ?? state.payload.avatarUrl ?? null,
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : 'Failed to persist X binding from browser login',
+        },
+        include: {
+          binding: true,
+        },
+      });
     }
   }
 
