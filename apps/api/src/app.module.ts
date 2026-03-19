@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { envValidationSchema } from './config/env.validation';
 import { BindingsModule } from './modules/bindings/bindings.module';
 import { CrawlJobsModule } from './modules/crawl-jobs/crawl-jobs.module';
@@ -16,6 +17,7 @@ import { PrismaModule } from './modules/prisma/prisma.module';
       envFilePath: ['../../.env', '.env'],
       validationSchema: envValidationSchema,
     }),
+    ScheduleModule.forRoot(),
     PrismaModule,
     HealthModule,
     IdentityModule,
