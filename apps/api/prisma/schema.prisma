@@ -25,6 +25,15 @@ enum CredentialSource {
   EXTENSION
 }
 
+enum BindingBrowserSessionStatus {
+  PENDING
+  WAITING_LOGIN
+  SUCCESS
+  FAILED
+  EXPIRED
+  CANCELLED
+}
+
 enum CrawlTriggerType {
   MANUAL
   SCHEDULED
@@ -84,6 +93,7 @@ model User {
   accounts      Account[]
   sessions      Session[]
   bindings      XAccountBinding[]
+  bindingBrowserSessions BindingBrowserSession[]
   auditLogs     AuditLog[]
 
   @@map("users")
@@ -149,11 +159,36 @@ model XAccountBinding {
   crawlJob             CrawlJob?
   crawlRuns            CrawlRun[]
   archivedPosts        ArchivedPost[]
+  bindingBrowserSessions BindingBrowserSession[]
 
   @@index([userId])
   @@index([status])
   @@index([nextCrawlAt])
   @@map("x_account_bindings")
+}
+
+model BindingBrowserSession {
+  id                     String                      @id @default(cuid())
+  userId                 String                      @map("user_id")
+  bindingId              String?                     @map("binding_id")
+  status                 BindingBrowserSessionStatus @default(PENDING)
+  loginUrl               String                      @db.Text @map("login_url")
+  capturedPayloadEncrypted String?                   @db.Text @map("captured_payload_encrypted")
+  expiresAt              DateTime                    @map("expires_at")
+  completedAt            DateTime?                   @map("completed_at")
+  errorMessage           String?                     @db.Text @map("error_message")
+  xUserId                String?                     @map("x_user_id")
+  username               String?
+  displayName            String?                     @map("display_name")
+  avatarUrl              String?                     @map("avatar_url")
+  createdAt              DateTime                    @default(now()) @map("created_at")
+  updatedAt              DateTime                    @updatedAt @map("updated_at")
+  user                   User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  binding                XAccountBinding?            @relation(fields: [bindingId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([status, expiresAt])
+  @@map("binding_browser_sessions")
 }
 
 model CrawlJob {

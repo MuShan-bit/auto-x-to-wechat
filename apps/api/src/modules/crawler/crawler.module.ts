@@ -4,11 +4,13 @@ import { MockFeedCrawlerAdapter } from './adapters/mock-feed-crawler.adapter';
 import { RealFeedCrawlerAdapter } from './adapters/real-feed-crawler.adapter';
 import { FEED_CRAWLER_ADAPTER } from './crawler.constants';
 import type { FeedCrawlerAdapter } from './crawler.types';
+import { XBrowserAutomationService } from './x-browser-automation.service';
 
 @Module({
   providers: [
     MockFeedCrawlerAdapter,
     RealFeedCrawlerAdapter,
+    XBrowserAutomationService,
     {
       provide: FEED_CRAWLER_ADAPTER,
       inject: [ConfigService, MockFeedCrawlerAdapter, RealFeedCrawlerAdapter],
@@ -26,6 +28,6 @@ import type { FeedCrawlerAdapter } from './crawler.types';
       },
     },
   ],
-  exports: [FEED_CRAWLER_ADAPTER],
+  exports: [FEED_CRAWLER_ADAPTER, XBrowserAutomationService],
 })
 export class CrawlerModule {}

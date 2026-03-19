@@ -12,4 +12,11 @@ export const envValidationSchema = Joi.object({
   CRAWLER_ADAPTER_NAME: Joi.string()
     .valid(...crawlerAdapterNames)
     .default('mock'),
+  X_BROWSER_EXECUTABLE_PATH: Joi.string().optional(),
+  X_BROWSER_CHANNEL: Joi.string().optional(),
+  X_BINDING_SESSION_TIMEOUT_SECONDS: Joi.number()
+    .integer()
+    .min(60)
+    .default(600),
+  REAL_CRAWLER_MAX_POSTS: Joi.number().integer().min(1).max(100).default(20),
 });
