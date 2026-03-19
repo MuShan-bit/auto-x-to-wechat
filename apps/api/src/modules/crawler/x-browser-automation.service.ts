@@ -212,9 +212,11 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
       this.configService.get<number>('REAL_CRAWLER_MAX_POSTS') ?? 20;
 
     try {
+      await this.prepareHomeTimelineForScraping(session.page);
+
       const postsById = new Map<string, RawFeedResponse['posts'][number]>();
 
-      for (let iteration = 0; iteration < 3; iteration += 1) {
+      for (let iteration = 0; iteration < 4; iteration += 1) {
         const batch = await this.scrapeVisiblePosts(session.page, maxPosts);
 
         for (const item of batch) {
@@ -225,15 +227,20 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
           break;
         }
 
-        await session.page.mouse.wheel(0, 1400);
-        await session.page.waitForTimeout(900);
+        await this.advanceHomeTimeline(
+          session.page,
+          iteration,
+          batch.length === 0,
+        );
       }
 
       const posts = Array.from(postsById.values()).slice(0, maxPosts);
 
       if (posts.length === 0) {
+        const diagnostics = await this.capturePageDiagnostics(session.page);
+
         throw new CrawlerStructureChangedError(
-          'No visible posts were captured from the X home timeline',
+          `No visible posts were captured from the X home timeline (${diagnostics})`,
         );
       }
 
@@ -318,9 +325,11 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
   }
 
   private async launchBrowser(headless: boolean) {
-    const executablePath = this.configService.get<string>(
+    const configuredExecutablePath = this.configService.get<string>(
       'X_BROWSER_EXECUTABLE_PATH',
     );
+    const executablePath =
+      configuredExecutablePath || this.resolveSystemChromeExecutablePath();
     const channel = this.configService.get<string>('X_BROWSER_CHANNEL');
 
     try {
@@ -491,6 +500,32 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
     });
   }
 
+  private async prepareHomeTimelineForScraping(page: Page) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await this.selectPrimaryTimelineTab(page);
+
+      if (await this.waitForVisibleTweets(page, 7000)) {
+        return;
+      }
+
+      await page.mouse.wheel(0, 1600).catch(() => undefined);
+      await page.waitForTimeout(1200);
+
+      if (await this.waitForVisibleTweets(page, 4000)) {
+        return;
+      }
+
+      await page
+        .goto(HOME_URL, {
+          waitUntil: 'domcontentloaded',
+        })
+        .catch(() => undefined);
+      await page.waitForLoadState('domcontentloaded').catch(() => undefined);
+      await page.waitForTimeout(1500);
+      await this.ensureAuthenticatedShell(page);
+    }
+  }
+
   private async ensureAuthenticatedShell(page: Page) {
     if (this.isLoginUrl(page.url())) {
       throw new CrawlerAuthError('X login session is not authenticated');
@@ -520,17 +555,7 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
       );
     }
 
-    try {
-      const firstTab = page.locator('[role="tablist"] [role="tab"]').first();
-
-      if ((await firstTab.count()) > 0) {
-        await firstTab.click({
-          timeout: 2500,
-        });
-      }
-    } catch {
-      // Ignore tab switching failures. The timeline may already be visible.
-    }
+    await this.selectPrimaryTimelineTab(page);
 
     const hasAuthenticatedShell = await page
       .evaluate(() => {
@@ -552,6 +577,28 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
       throw new CrawlerAuthError(
         `Unable to confirm an authenticated X home timeline session (${diagnostics})`,
       );
+    }
+  }
+
+  private async selectPrimaryTimelineTab(page: Page) {
+    try {
+      const tabs = page.locator('[role="tablist"] [role="tab"]');
+
+      if ((await tabs.count()) === 0) {
+        return;
+      }
+
+      const firstTab = tabs.first();
+      const isSelected = await firstTab.getAttribute('aria-selected');
+
+      if (isSelected !== 'true') {
+        await firstTab.click({
+          timeout: 2500,
+        });
+        await page.waitForTimeout(900);
+      }
+    } catch {
+      // Ignore tab switching failures. The timeline may already be visible.
     }
   }
 
@@ -959,6 +1006,77 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
     return url.includes('/i/flow/login') || url.includes('/login');
   }
 
+  private async waitForVisibleTweets(page: Page, timeoutMs: number) {
+    const deadline = Date.now() + timeoutMs;
+    let attempt = 0;
+
+    while (Date.now() < deadline) {
+      const visibleTweetCount = await this.countVisibleTweets(page);
+
+      if (visibleTweetCount > 0) {
+        return true;
+      }
+
+      if (attempt === 1) {
+        await this.selectPrimaryTimelineTab(page);
+      } else if (attempt === 2) {
+        await page.mouse.wheel(0, 1200).catch(() => undefined);
+      } else if (attempt === 3) {
+        await page.mouse.wheel(0, -800).catch(() => undefined);
+      }
+
+      await page.waitForTimeout(1000);
+      attempt += 1;
+    }
+
+    return false;
+  }
+
+  private async advanceHomeTimeline(
+    page: Page,
+    iteration: number,
+    shouldAggressivelyWakeTimeline: boolean,
+  ) {
+    if (shouldAggressivelyWakeTimeline) {
+      await this.selectPrimaryTimelineTab(page);
+
+      if (iteration >= 1) {
+        await page
+          .goto(HOME_URL, {
+            waitUntil: 'domcontentloaded',
+          })
+          .catch(() => undefined);
+        await page.waitForLoadState('domcontentloaded').catch(() => undefined);
+        await page.waitForTimeout(1400);
+      }
+    }
+
+    await page.mouse
+      .wheel(0, shouldAggressivelyWakeTimeline ? 1800 : 1400)
+      .catch(() => undefined);
+    await page.waitForTimeout(shouldAggressivelyWakeTimeline ? 1400 : 900);
+  }
+
+  private countVisibleTweets(page: Page) {
+    return page
+      .evaluate(() => {
+        return Array.from(
+          document.querySelectorAll('article[data-testid="tweet"]'),
+        ).filter((item) => {
+          const rect = item.getBoundingClientRect();
+          const style = window.getComputedStyle(item);
+
+          return (
+            rect.width > 0 &&
+            rect.height > 0 &&
+            style.display !== 'none' &&
+            style.visibility !== 'hidden'
+          );
+        }).length;
+      })
+      .catch(() => 0);
+  }
+
   private decodeHtmlEscapes(value: string) {
     return value
       .replaceAll('&quot;', '"')
@@ -969,7 +1087,17 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
   private async capturePageDiagnostics(page: Page) {
     try {
       const snapshot = await page.evaluate(() => {
+        const tabs = Array.from(
+          document.querySelectorAll('[role="tablist"] [role="tab"]'),
+        ).map((item) => ({
+          selected: item.getAttribute('aria-selected') === 'true',
+          text: item.textContent?.trim() ?? '',
+        }));
+
         return {
+          bodyPreview: document.body.innerText
+            .replace(/\s+/g, ' ')
+            .slice(0, 240),
           title: document.title,
           href: window.location.href,
           hasPrimaryColumn: Boolean(
@@ -989,10 +1117,18 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
           hasTweet: Boolean(
             document.querySelector('article[data-testid="tweet"]'),
           ),
+          hasProgressBar: Boolean(
+            document.querySelector('[role="progressbar"]'),
+          ),
+          tabSummary: tabs
+            .map((item) => `${item.selected ? '*' : ''}${item.text}`)
+            .join('|'),
+          tweetCount: document.querySelectorAll('article[data-testid="tweet"]')
+            .length,
         };
       });
 
-      return `url=${snapshot.href}; title=${snapshot.title}; primaryColumn=${snapshot.hasPrimaryColumn}; accountSwitcher=${snapshot.hasAccountSwitcher}; profileLink=${snapshot.hasProfileLink}; homeLink=${snapshot.hasHomeLink}; tweet=${snapshot.hasTweet}`;
+      return `url=${snapshot.href}; title=${snapshot.title}; primaryColumn=${snapshot.hasPrimaryColumn}; accountSwitcher=${snapshot.hasAccountSwitcher}; profileLink=${snapshot.hasProfileLink}; homeLink=${snapshot.hasHomeLink}; tweet=${snapshot.hasTweet}; tweetCount=${snapshot.tweetCount}; progress=${snapshot.hasProgressBar}; tabs=${snapshot.tabSummary}; body=${snapshot.bodyPreview}`;
     } catch {
       return `url=${page.url()}`;
     }
