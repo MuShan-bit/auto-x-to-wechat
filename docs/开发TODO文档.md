@@ -438,9 +438,10 @@
 
 ### 11.3 部署
 
-- [ ] `T1005` `P1` 编写 Dockerfile 与本地 `docker-compose`。
+- [x] `T1005` `P1` 编写 Dockerfile 与本地 `docker-compose`。
 完成标准：本地可一键拉起 `api + db` 或完整服务。
 依赖：`T103`、`T110`。
+备注：已补充根目录 `docker-compose.yml`、前后端 Dockerfile 与部署说明文档；Compose 默认使用 `mock` 抓取器，真实 X 交互式绑定仍建议在宿主机 API 环境运行。
 
 - [ ] `T1006` `P1` 配置 Vercel 前端部署。
 完成标准：前端可连接生产或测试 API。

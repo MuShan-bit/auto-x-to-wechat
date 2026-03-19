@@ -1,16 +1,74 @@
 services:
-  postgres:
+  db:
     image: postgres:16-alpine
-    container_name: auto-x-to-wechat-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: auto_x_to_wechat
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d auto_x_to_wechat"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "${DOCKER_DB_PORT:-55432}:5432"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/auto_x_to_wechat?schema=public
+      INTERNAL_API_SHARED_SECRET: replace-with-an-internal-shared-secret
+      CREDENTIAL_ENCRYPTION_KEY: replace-with-32-byte-secret
+      CRAWLER_ADAPTER_NAME: mock
+      X_BINDING_SESSION_TIMEOUT_SECONDS: 600
+      REAL_CRAWLER_MAX_POSTS: 20
+    ports:
+      - "${DOCKER_API_PORT:-3001}:3001"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/health').then((response) => { if (!response.ok) { throw new Error('Unexpected status ' + response.status); } }).catch((error) => { console.error(error); process.exit(1); })",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    profiles: ["full"]
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      NEXTAUTH_URL: http://localhost:${DOCKER_WEB_PORT:-3000}
+      NEXTAUTH_SECRET: replace-with-a-long-random-string
+      AUTH_TRUST_HOST: "true"
+      INTERNAL_API_BASE_URL: http://api:3001
+      INTERNAL_API_SHARED_SECRET: replace-with-an-internal-shared-secret
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/auto_x_to_wechat?schema=public
+    ports:
+      - "${DOCKER_WEB_PORT:-3000}:3000"
 
 volumes:
   postgres-data:
