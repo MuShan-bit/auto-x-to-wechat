@@ -1,7 +1,7 @@
 import { type MediaType } from '@prisma/client';
 import { type NormalizedPost } from '../crawler/crawler.types';
 
-type RichTextNode =
+export type RichTextNode =
   | {
       text: string;
       type: 'text';
@@ -23,12 +23,12 @@ type RichTextNode =
       username: string;
     };
 
-type RichTextParagraphBlock = {
+export type RichTextParagraphBlock = {
   children: RichTextNode[];
   type: 'paragraph';
 };
 
-type RichTextMediaBlock = {
+export type RichTextMediaBlock = {
   height?: number;
   mediaType: MediaType;
   previewUrl?: string;
