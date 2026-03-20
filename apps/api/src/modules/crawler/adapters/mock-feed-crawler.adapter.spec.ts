@@ -48,6 +48,20 @@ describe('MockFeedCrawlerAdapter', () => {
     expect(response.posts[0]?.xPostId).toBe('mock-hot-post-001');
   });
 
+  it('returns a search-feed payload keyed by the query text', async () => {
+    const response = await adapter.fetchSearchFeed(
+      JSON.stringify({
+        cookie: 'demo-cookie',
+      }),
+      'AI agents',
+    );
+
+    expect(response.metadata).toMatchObject({
+      source: 'mock-search',
+    });
+    expect(response.posts[0]?.xPostId).toContain('mock-search-ai-agents');
+  });
+
   it('classifies exhausted network retries as network errors', async () => {
     await expect(
       adapter.fetchRecommendedFeed(

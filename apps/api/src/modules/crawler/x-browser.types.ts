@@ -68,6 +68,10 @@ export type XBrowserAutomationPort = {
   fetchRecommendedFeed(
     payload: RealBrowserCredentialPayload,
   ): Promise<RawFeedResponse>;
+  fetchSearchFeed(
+    payload: RealBrowserCredentialPayload,
+    queryText: string,
+  ): Promise<RawFeedResponse>;
   resolvePostVideoMedia(
     payload: RealBrowserCredentialPayload,
     postUrl: string,

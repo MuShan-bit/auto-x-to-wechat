@@ -96,6 +96,7 @@ export class CrawlExecutionService {
       const rawFeed = await this.fetchFeedForProfile(
         crawlMode,
         credentialPayload,
+        crawlProfile?.queryText ?? null,
       );
       const normalizedPosts = await this.feedCrawlerAdapter.normalizePosts(
         rawFeed,
@@ -350,14 +351,22 @@ export class CrawlExecutionService {
     }
   }
 
-  private async fetchFeedForProfile(mode: CrawlMode, payload: string) {
+  private async fetchFeedForProfile(
+    mode: CrawlMode,
+    payload: string,
+    queryText: string | null,
+  ) {
     switch (mode) {
       case CrawlMode.RECOMMENDED:
         return this.feedCrawlerAdapter.fetchRecommendedFeed(payload);
       case CrawlMode.HOT:
         return this.feedCrawlerAdapter.fetchHotFeed(payload);
       case CrawlMode.SEARCH:
-        throw new Error(`Crawl mode ${mode} is not implemented yet`);
+        if (!queryText?.trim()) {
+          throw new Error('Search crawl profile requires a query text');
+        }
+
+        return this.feedCrawlerAdapter.fetchSearchFeed(payload, queryText);
     }
   }
 

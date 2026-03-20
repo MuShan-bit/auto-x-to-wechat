@@ -282,6 +282,23 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
     });
   }
 
+  async fetchSearchFeed(
+    payload: RealBrowserCredentialPayload,
+    queryText: string,
+  ) {
+    const searchUrl = this.buildSearchUrl(queryText);
+
+    return this.fetchTimelineFeed(payload, {
+      diagnosticsLabel: `X search timeline for "${queryText}"`,
+      metadataSource: searchUrl,
+      prepare: (page) =>
+        this.prepareFeedPageForScraping(page, {
+          selectPrimaryTimelineTab: false,
+          url: searchUrl,
+        }),
+    });
+  }
+
   async resolvePostVideoMedia(
     payload: RealBrowserCredentialPayload,
     postUrl: string,
@@ -1440,6 +1457,10 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
       .replaceAll('&quot;', '"')
       .replaceAll('&#x2F;', '/')
       .replaceAll('&amp;', '&');
+  }
+
+  private buildSearchUrl(queryText: string) {
+    return `https://x.com/search?q=${encodeURIComponent(queryText)}&src=typed_query&f=live`;
   }
 
   private async capturePageDiagnostics(page: Page) {

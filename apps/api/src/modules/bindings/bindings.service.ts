@@ -6,6 +6,7 @@ import {
   type Prisma,
 } from '@prisma/client';
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -416,6 +417,7 @@ export class BindingsService {
     dto: CreateCrawlProfileDto,
   ) {
     await this.assertOwnership(userId, bindingId);
+    this.assertSearchProfileQueryText(dto.mode, dto.queryText);
 
     return this.prisma.crawlProfile.create({
       data: {
@@ -439,7 +441,8 @@ export class BindingsService {
     dto: UpdateCrawlProfileDto,
   ) {
     await this.assertOwnership(userId, bindingId);
-    await this.assertCrawlProfileOwnership(bindingId, profileId);
+    const profile = await this.assertCrawlProfileOwnership(bindingId, profileId);
+    this.assertSearchProfileQueryText(profile.mode, dto.queryText);
 
     return this.prisma.crawlProfile.update({
       where: {
@@ -726,6 +729,21 @@ export class BindingsService {
         nextRunAt: input.nextRunAt,
       },
     });
+  }
+
+  private assertSearchProfileQueryText(
+    mode: CrawlMode,
+    queryText: string | undefined,
+  ) {
+    if (mode !== CrawlMode.SEARCH) {
+      return;
+    }
+
+    if (!queryText?.trim()) {
+      throw new BadRequestException(
+        'Search crawl profile requires a query text',
+      );
+    }
   }
 
   private buildNextRunAt(intervalMinutes: number) {

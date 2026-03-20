@@ -107,6 +107,7 @@ export interface FeedCrawlerAdapter {
 
   fetchHotFeed(payload: string): Promise<RawFeedResponse>;
   fetchRecommendedFeed(payload: string): Promise<RawFeedResponse>;
+  fetchSearchFeed(payload: string, queryText: string): Promise<RawFeedResponse>;
   normalizePosts(raw: RawFeedResponse): Promise<NormalizedPost[]>;
   validateCredential(payload: string): Promise<BindingProfile>;
 }

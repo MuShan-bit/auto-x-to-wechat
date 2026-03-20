@@ -225,4 +225,51 @@ describe('CrawlExecutionService', () => {
     expect(processedRun.fetchedCount).toBe(2);
     expect(storedProfile?.lastRunAt).not.toBeNull();
   });
+
+  it('processes a search crawl profile with the stored query text', async () => {
+    const binding = await prisma.xAccountBinding.create({
+      data: {
+        userId: 'worker_owner',
+        xUserId: 'x-search-worker',
+        username: 'worker_search_demo',
+        displayName: 'Worker Search Demo',
+        status: BindingStatus.ACTIVE,
+        credentialSource: CredentialSource.WEB_LOGIN,
+        authPayloadEncrypted: credentialCryptoService.encrypt(
+          '{"cookie":"worker-search"}',
+        ),
+        lastValidatedAt: new Date('2026-03-19T00:00:00.000Z'),
+        crawlEnabled: true,
+        crawlIntervalMinutes: 45,
+        nextCrawlAt: new Date('2026-03-19T12:00:00.000Z'),
+        crawlProfiles: {
+          create: [
+            {
+              mode: CrawlMode.SEARCH,
+              enabled: true,
+              intervalMinutes: 45,
+              queryText: 'AI agents',
+              maxPosts: 10,
+              nextRunAt: new Date('2026-03-19T12:00:00.000Z'),
+            },
+          ],
+        },
+      },
+      include: {
+        crawlProfiles: true,
+      },
+    });
+
+    const run = await crawlRunsService.createQueuedRun({
+      bindingId: binding.id,
+      crawlProfileId: binding.crawlProfiles[0]?.id,
+      triggerType: CrawlTriggerType.MANUAL,
+    });
+
+    const processedRun = await crawlExecutionService.processRun(run.id);
+
+    expect(processedRun.status).toBe(CrawlRunStatus.SUCCESS);
+    expect(processedRun.crawlProfileId).toBe(binding.crawlProfiles[0]!.id);
+    expect(processedRun.fetchedCount).toBe(2);
+  });
 });

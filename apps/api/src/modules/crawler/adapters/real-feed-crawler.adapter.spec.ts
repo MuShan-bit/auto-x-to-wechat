@@ -36,22 +36,30 @@ describe('RealFeedCrawlerAdapter', () => {
     } satisfies RawFeedResponse;
     const fetchHotFeed = jest.fn().mockResolvedValue(expectedResponse);
     const fetchRecommendedFeed = jest.fn().mockResolvedValue(expectedResponse);
+    const fetchSearchFeed = jest.fn().mockResolvedValue(expectedResponse);
     const validateCredential = jest.fn();
     const browserAutomationService = {
       fetchHotFeed,
       fetchRecommendedFeed,
+      fetchSearchFeed,
       validateCredential,
     } as unknown as XBrowserAutomationService;
     const adapter = new RealFeedCrawlerAdapter(browserAutomationService);
 
     const rawFeed = await adapter.fetchRecommendedFeed(JSON.stringify(payload));
     const hotFeed = await adapter.fetchHotFeed(JSON.stringify(payload));
+    const searchFeed = await adapter.fetchSearchFeed(
+      JSON.stringify(payload),
+      'ai agents',
+    );
 
     expect(fetchRecommendedFeed).toHaveBeenCalledWith(payload);
     expect(fetchHotFeed).toHaveBeenCalledWith(payload);
+    expect(fetchSearchFeed).toHaveBeenCalledWith(payload, 'ai agents');
     expect(validateCredential).not.toHaveBeenCalled();
     expect(rawFeed).toEqual(expectedResponse);
     expect(hotFeed).toEqual(expectedResponse);
+    expect(searchFeed).toEqual(expectedResponse);
   });
 
   it('validates real credentials through browser automation and merges fallback profile fields', async () => {
@@ -62,6 +70,7 @@ describe('RealFeedCrawlerAdapter', () => {
     const browserAutomationService = {
       fetchHotFeed: jest.fn(),
       fetchRecommendedFeed: jest.fn(),
+      fetchSearchFeed: jest.fn(),
       validateCredential,
     } as unknown as XBrowserAutomationService;
     const adapter = new RealFeedCrawlerAdapter(browserAutomationService);
@@ -81,6 +90,7 @@ describe('RealFeedCrawlerAdapter', () => {
     const browserAutomationService = {
       fetchHotFeed: jest.fn(),
       fetchRecommendedFeed: jest.fn(),
+      fetchSearchFeed: jest.fn(),
       validateCredential: jest.fn(),
     } as unknown as XBrowserAutomationService;
     const adapter = new RealFeedCrawlerAdapter(browserAutomationService);

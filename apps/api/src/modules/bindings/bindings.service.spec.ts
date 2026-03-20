@@ -336,6 +336,26 @@ describe('BindingsService', () => {
     );
   });
 
+  it('requires query text for search crawl profiles', async () => {
+    const binding = await createBinding({
+      xUserId: 'x-search-profile',
+      username: 'search_profile_owner',
+      displayName: 'Search Profile Owner',
+      status: BindingStatus.ACTIVE,
+      crawlEnabled: true,
+      crawlIntervalMinutes: 30,
+    });
+
+    await expect(
+      bindingsService.createCrawlProfile('binding_owner', binding.id, {
+        mode: CrawlMode.SEARCH,
+        enabled: true,
+        intervalMinutes: 120,
+        maxPosts: 20,
+      }),
+    ).rejects.toThrow('Search crawl profile requires a query text');
+  });
+
   it('revalidates a binding and refreshes stored profile fields', async () => {
     const binding = await createBinding({
       xUserId: 'x-revalidate',

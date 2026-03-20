@@ -48,6 +48,12 @@ export class RealFeedCrawlerAdapter implements FeedCrawlerAdapter {
     return this.xBrowserAutomationService.fetchHotFeed(parsed);
   }
 
+  fetchSearchFeed(payload: string, queryText: string): Promise<RawFeedResponse> {
+    const parsed = this.parseCredential(payload);
+
+    return this.xBrowserAutomationService.fetchSearchFeed(parsed, queryText);
+  }
+
   normalizePosts(raw: RawFeedResponse): Promise<NormalizedPost[]> {
     const normalizedRaw = {
       ...raw,

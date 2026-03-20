@@ -38,6 +38,13 @@ export class FeedCrawlerAdapterRouter implements FeedCrawlerAdapter {
     );
   }
 
+  fetchSearchFeed(payload: string, queryText: string): Promise<RawFeedResponse> {
+    return this.resolveAdapterFromPayload(payload).fetchSearchFeed(
+      payload,
+      queryText,
+    );
+  }
+
   normalizePosts(raw: RawFeedResponse): Promise<NormalizedPost[]> {
     return this.resolveAdapterFromRaw(raw).normalizePosts(raw);
   }

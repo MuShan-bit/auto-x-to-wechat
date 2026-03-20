@@ -56,13 +56,21 @@ export class MockFeedCrawlerAdapter implements FeedCrawlerAdapter {
     return this.fetchMockFeed(payload, 'hot');
   }
 
+  async fetchSearchFeed(
+    payload: string,
+    queryText: string,
+  ): Promise<RawFeedResponse> {
+    return this.fetchMockFeed(payload, 'search', queryText);
+  }
+
   normalizePosts(raw: RawFeedResponse): Promise<NormalizedPost[]> {
     return Promise.resolve(normalizeRawFeedPosts(raw));
   }
 
   private async fetchMockFeed(
     payload: string,
-    feedKind: 'recommended' | 'hot',
+    feedKind: 'recommended' | 'hot' | 'search',
+    queryText?: string,
   ): Promise<RawFeedResponse> {
     const profile = await this.validateCredential(payload);
     const parsed = this.parseCredential(payload);
@@ -73,7 +81,7 @@ export class MockFeedCrawlerAdapter implements FeedCrawlerAdapter {
         attempt += 1;
         this.throwMockFailure(parsed, attempt);
 
-        return this.buildMockResponse(profile, attempt, feedKind);
+        return this.buildMockResponse(profile, attempt, feedKind, queryText);
       },
       {
         baseDelayMs: 0,
@@ -116,14 +124,30 @@ export class MockFeedCrawlerAdapter implements FeedCrawlerAdapter {
   private buildMockResponse(
     profile: BindingProfile,
     attempt: number,
-    feedKind: 'recommended' | 'hot',
+    feedKind: 'recommended' | 'hot' | 'search',
+    queryText?: string,
   ): RawFeedResponse {
     const now = new Date().toISOString();
-    const source = feedKind === 'hot' ? 'mock-hot' : 'mock';
+    const sanitizedQueryText =
+      queryText?.trim().replace(/\s+/g, '-').toLowerCase() || 'default-search';
+    const source =
+      feedKind === 'hot'
+        ? 'mock-hot'
+        : feedKind === 'search'
+          ? 'mock-search'
+          : 'mock';
     const firstPostId =
-      feedKind === 'hot' ? 'mock-hot-post-001' : 'mock-post-001';
+      feedKind === 'hot'
+        ? 'mock-hot-post-001'
+        : feedKind === 'search'
+          ? `mock-search-${sanitizedQueryText}-001`
+          : 'mock-post-001';
     const secondPostId =
-      feedKind === 'hot' ? 'mock-hot-post-002' : 'mock-post-002';
+      feedKind === 'hot'
+        ? 'mock-hot-post-002'
+        : feedKind === 'search'
+          ? `mock-search-${sanitizedQueryText}-002`
+          : 'mock-post-002';
 
     return {
       adapter: this.name,
@@ -147,6 +171,8 @@ export class MockFeedCrawlerAdapter implements FeedCrawlerAdapter {
           rawText:
             feedKind === 'hot'
               ? 'Trending now: this hot-feed mock post verifies the explore capture flow.'
+              : feedKind === 'search'
+                ? `Search feed hit for "${queryText ?? 'default search'}" verifies the custom search capture flow.`
               : 'GPT-5.4 release notes are live. This mock post helps us verify archive flows.',
           sourceCreatedAt: now,
           language: 'en',
@@ -184,6 +210,7 @@ export class MockFeedCrawlerAdapter implements FeedCrawlerAdapter {
             id: firstPostId,
             adapter: this.name,
             feedKind,
+            queryText,
           },
         },
         {
@@ -198,6 +225,8 @@ export class MockFeedCrawlerAdapter implements FeedCrawlerAdapter {
           rawText:
             feedKind === 'hot'
               ? 'Quoting a hot topic observation from the explore feed for pagination testing.'
+              : feedKind === 'search'
+                ? `Quoting another search result about "${queryText ?? 'default search'}" for pagination testing.`
               : 'Quoting a trend observation from the recommendation feed for pagination testing.',
           sourceCreatedAt: now,
           language: 'en',
@@ -229,6 +258,7 @@ export class MockFeedCrawlerAdapter implements FeedCrawlerAdapter {
             id: secondPostId,
             adapter: this.name,
             feedKind,
+            queryText,
           },
         },
       ],

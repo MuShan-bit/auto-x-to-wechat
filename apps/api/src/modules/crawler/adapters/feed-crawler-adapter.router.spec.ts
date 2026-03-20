@@ -42,21 +42,25 @@ describe('FeedCrawlerAdapterRouter', () => {
     const mockValidateCredential = jest.fn();
     const mockFetchHotFeed = jest.fn();
     const mockFetchRecommendedFeed = jest.fn();
+    const mockFetchSearchFeed = jest.fn();
     const mockNormalizePosts = jest.fn();
     const mockAdapter = {
       validateCredential: mockValidateCredential,
       fetchHotFeed: mockFetchHotFeed,
       fetchRecommendedFeed: mockFetchRecommendedFeed,
+      fetchSearchFeed: mockFetchSearchFeed,
       normalizePosts: mockNormalizePosts,
     } as unknown as MockFeedCrawlerAdapter;
     const realValidateCredential = jest.fn().mockResolvedValue(profile);
     const realFetchHotFeed = jest.fn().mockResolvedValue(rawFeed);
     const realFetchRecommendedFeed = jest.fn().mockResolvedValue(rawFeed);
+    const realFetchSearchFeed = jest.fn().mockResolvedValue(rawFeed);
     const realNormalizePosts = jest.fn().mockResolvedValue(normalizedPosts);
     const realAdapter = {
       validateCredential: realValidateCredential,
       fetchHotFeed: realFetchHotFeed,
       fetchRecommendedFeed: realFetchRecommendedFeed,
+      fetchSearchFeed: realFetchSearchFeed,
       normalizePosts: realNormalizePosts,
     } as unknown as RealFeedCrawlerAdapter;
     const router = new FeedCrawlerAdapterRouter(
@@ -72,6 +76,9 @@ describe('FeedCrawlerAdapterRouter', () => {
     await expect(router.fetchRecommendedFeed(realPayload)).resolves.toEqual(
       rawFeed,
     );
+    await expect(router.fetchSearchFeed(realPayload, 'ai agents')).resolves.toEqual(
+      rawFeed,
+    );
     await expect(router.normalizePosts(rawFeed)).resolves.toEqual(
       normalizedPosts,
     );
@@ -79,10 +86,12 @@ describe('FeedCrawlerAdapterRouter', () => {
     expect(realValidateCredential).toHaveBeenCalledWith(realPayload);
     expect(realFetchHotFeed).toHaveBeenCalledWith(realPayload);
     expect(realFetchRecommendedFeed).toHaveBeenCalledWith(realPayload);
+    expect(realFetchSearchFeed).toHaveBeenCalledWith(realPayload, 'ai agents');
     expect(realNormalizePosts).toHaveBeenCalledWith(rawFeed);
     expect(mockValidateCredential).not.toHaveBeenCalled();
     expect(mockFetchHotFeed).not.toHaveBeenCalled();
     expect(mockFetchRecommendedFeed).not.toHaveBeenCalled();
+    expect(mockFetchSearchFeed).not.toHaveBeenCalled();
     expect(mockNormalizePosts).not.toHaveBeenCalled();
   });
 });
