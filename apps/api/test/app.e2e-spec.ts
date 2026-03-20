@@ -1089,6 +1089,56 @@ describe('AppController (e2e)', () => {
     expect(storedRuns[0]?.status).toBe(CrawlRunStatus.SUCCESS);
   });
 
+  it('/bindings/:id/crawl-profiles/:profileId/crawl-now triggers the selected crawl profile', async () => {
+    const createResponse = await request(app.getHttpServer())
+      .post('/bindings')
+      .set(internalHeaders)
+      .send({
+        xUserId: 'x-user-profile-manual',
+        username: 'profile_manual_owner',
+        displayName: 'Profile Manual Owner',
+        credentialSource: 'WEB_LOGIN',
+        credentialPayload: '{"cookie":"profile-manual"}',
+        crawlEnabled: true,
+        crawlIntervalMinutes: 30,
+      })
+      .expect(201);
+
+    const binding = createResponse.body as {
+      id: string;
+    };
+
+    const profileResponse = await request(app.getHttpServer())
+      .post(`/bindings/${binding.id}/crawl-profiles`)
+      .set(internalHeaders)
+      .send({
+        mode: 'SEARCH',
+        enabled: true,
+        intervalMinutes: 90,
+        queryText: 'AI agents',
+        maxPosts: 20,
+      })
+      .expect(201);
+
+    const profile = profileResponse.body as {
+      id: string;
+    };
+
+    await request(app.getHttpServer())
+      .post(`/bindings/${binding.id}/crawl-profiles/${profile.id}/crawl-now`)
+      .set(internalHeaders)
+      .expect(201)
+      .expect(({ body }) => {
+        const payload = body as {
+          crawlProfileId: string | null;
+          status: string;
+        };
+
+        expect(payload.crawlProfileId).toBe(profile.id);
+        expect(payload.status).toBe('SUCCESS');
+      });
+  });
+
   it('/bindings/:id/crawl-now returns the active running run in conflict details', async () => {
     const createResponse = await request(app.getHttpServer())
       .post('/bindings')

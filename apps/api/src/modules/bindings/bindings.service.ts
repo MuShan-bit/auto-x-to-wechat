@@ -325,6 +325,22 @@ export class BindingsService {
   }
 
   async triggerManualCrawl(userId: string, bindingId: string) {
+    return this.triggerManualCrawlInternal(userId, bindingId);
+  }
+
+  async triggerManualCrawlProfile(
+    userId: string,
+    bindingId: string,
+    profileId: string,
+  ) {
+    return this.triggerManualCrawlInternal(userId, bindingId, profileId);
+  }
+
+  private async triggerManualCrawlInternal(
+    userId: string,
+    bindingId: string,
+    profileId?: string,
+  ) {
     const binding = await this.prisma.xAccountBinding.findFirst({
       where: {
         id: bindingId,
@@ -351,10 +367,16 @@ export class BindingsService {
     }
 
     if (
-      !binding.crawlProfiles.some((profile) => profile.mode === CrawlMode.RECOMMENDED)
+      !binding.crawlProfiles.some((profile) =>
+        profileId
+          ? profile.id === profileId
+          : profile.mode === CrawlMode.RECOMMENDED,
+      )
     ) {
       throw new ConflictException(
-        'Binding is missing crawl profile configuration and cannot be triggered',
+        profileId
+          ? 'Binding is missing the selected crawl profile configuration and cannot be triggered'
+          : 'Binding is missing crawl profile configuration and cannot be triggered',
       );
     }
 
@@ -372,7 +394,11 @@ export class BindingsService {
       return this.crawlRunDispatcher.dispatchRun(queuedRun.id);
     }
 
-    const [run] = await this.crawlJobsService.claimJobForBinding(binding.id);
+    const [run] = await this.crawlJobsService.claimJobForBinding(
+      binding.id,
+      undefined,
+      profileId,
+    );
 
     if (!run) {
       const blockingRun =

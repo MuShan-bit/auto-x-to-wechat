@@ -177,6 +177,26 @@ type Messages = {
     latestError: string;
     emptyTitle: string;
     emptyDescription: string;
+    profilesTitle: string;
+    profilesDescription: string;
+    profileRunSummary: string;
+    lastRunLabel: string;
+    nextRunLabel: string;
+    profileModeLabel: string;
+    maxPostsLabel: string;
+    queryTextLabel: string;
+    queryTextPlaceholder: string;
+    profileEnabledLabel: string;
+    profileEnabledHint: string;
+    saveProfile: string;
+    savingProfile: string;
+    triggerProfileNow: string;
+    addProfileTitle: string;
+    addProfileDescription: string;
+    addProfile: string;
+    addingProfile: string;
+    emptyProfilesTitle: string;
+    emptyProfilesDescription: string;
     crawlConfigTitle: string;
     crawlConfigDescription: string;
     autoCrawlTitle: string;
@@ -364,6 +384,7 @@ type Messages = {
       string
     >;
     triggerType: Record<"MANUAL" | "SCHEDULED" | "RETRY", string>;
+    crawlMode: Record<"RECOMMENDED" | "HOT" | "SEARCH", string>;
     postType: Record<"POST" | "REPOST" | "QUOTE" | "REPLY", string>;
     credentialSource: Record<"WEB_LOGIN" | "COOKIE_IMPORT" | "EXTENSION", string>;
     browserSessionStatus: Record<
@@ -390,9 +411,18 @@ type Messages = {
       invalidCrawlIntervalInt: string;
       invalidCrawlIntervalMin: string;
       invalidCrawlIntervalMax: string;
+      missingMaxPosts: string;
+      invalidMaxPostsInt: string;
+      invalidMaxPostsMin: string;
+      invalidMaxPostsMax: string;
       missingBindingId: string;
+      missingProfileId: string;
+      missingQueryText: string;
       bindingValidationFailed: string;
+      profileValidationFailed: string;
       bindingSaved: string;
+      profileCreated: string;
+      profileUpdated: string;
       configValidationFailed: string;
       configSaved: string;
       bindingRevalidated: string;
@@ -401,6 +431,7 @@ type Messages = {
       viewCurrentRun: string;
       viewTriggeredRun: string;
       manualCrawlTriggered: string;
+      profileManualTriggered: string;
     };
     api: {
       unauthorized: string;
@@ -619,6 +650,26 @@ const messages: Record<Locale, Messages> = {
       latestError: "最近错误",
       emptyTitle: "还没有绑定 X 账号",
       emptyDescription: "优先使用右侧的浏览器辅助绑定流程。登录成功后，这里会自动展示绑定状态、抓取配置和最近校验结果。",
+      profilesTitle: "抓取策略",
+      profilesDescription: "每个账号可以配置多个抓取策略。你可以在这里分别管理推荐、热点和搜索模式的启停、频率与即时执行。",
+      profileRunSummary: "执行概览：",
+      lastRunLabel: "最近执行：",
+      nextRunLabel: "下一次：",
+      profileModeLabel: "策略模式",
+      maxPostsLabel: "单次最多抓取帖子数",
+      queryTextLabel: "搜索词",
+      queryTextPlaceholder: "例如 AI agents、科技热点",
+      profileEnabledLabel: "启用该策略",
+      profileEnabledHint: "关闭后不会参与定时扫描，但仍可手动触发。",
+      saveProfile: "保存策略",
+      savingProfile: "保存策略中...",
+      triggerProfileNow: "立即执行该策略",
+      addProfileTitle: "新增抓取策略",
+      addProfileDescription: "给当前账号追加新的热点或搜索策略。搜索模式必须填写搜索词。",
+      addProfile: "新增策略",
+      addingProfile: "新增中...",
+      emptyProfilesTitle: "当前账号还没有抓取策略",
+      emptyProfilesDescription: "先新增一条策略，或重新保存当前绑定，让系统自动补齐默认推荐策略。",
       crawlConfigTitle: "抓取配置",
       crawlConfigDescription: "单独调整抓取开关和抓取周期，不需要重新粘贴凭证。",
       autoCrawlTitle: "自动抓取",
@@ -824,6 +875,11 @@ const messages: Record<Locale, Messages> = {
         SCHEDULED: "定时",
         RETRY: "重试",
       },
+      crawlMode: {
+        RECOMMENDED: "推荐模式",
+        HOT: "热点模式",
+        SEARCH: "搜索模式",
+      },
       postType: {
         POST: "原帖",
         REPOST: "转推",
@@ -871,9 +927,18 @@ const messages: Record<Locale, Messages> = {
         invalidCrawlIntervalInt: "抓取周期必须为整数",
         invalidCrawlIntervalMin: "抓取周期不能小于 5 分钟",
         invalidCrawlIntervalMax: "抓取周期不能超过 1440 分钟",
+        missingMaxPosts: "请填写单次抓取上限",
+        invalidMaxPostsInt: "单次抓取上限必须为整数",
+        invalidMaxPostsMin: "单次抓取上限不能小于 1",
+        invalidMaxPostsMax: "单次抓取上限不能超过 200",
         missingBindingId: "缺少绑定 ID。",
+        missingProfileId: "缺少策略 ID。",
+        missingQueryText: "搜索模式必须填写搜索词。",
         bindingValidationFailed: "绑定信息校验失败。",
+        profileValidationFailed: "抓取策略校验失败。",
         bindingSaved: "绑定信息已保存。",
+        profileCreated: "抓取策略已创建。",
+        profileUpdated: "抓取策略已更新。",
         configValidationFailed: "抓取配置校验失败。",
         configSaved: "抓取配置已更新。",
         bindingRevalidated: "绑定状态已重新校验。",
@@ -882,6 +947,7 @@ const messages: Record<Locale, Messages> = {
         viewCurrentRun: "查看当前抓取记录",
         viewTriggeredRun: "查看本次抓取记录",
         manualCrawlTriggered: "手动抓取已执行，当前状态：{status}（{triggerType}）。",
+        profileManualTriggered: "策略抓取已执行，当前状态：{status}（{triggerType}）。",
       },
       api: {
         unauthorized: "未登录或会话已失效。",
@@ -1079,6 +1145,26 @@ const messages: Record<Locale, Messages> = {
       latestError: "Latest error",
       emptyTitle: "No X account is bound yet",
       emptyDescription: "Prefer the browser-assisted binding flow on the right. Once login succeeds, this panel will update automatically with binding status, crawl config, and validation results.",
+      profilesTitle: "Crawl profiles",
+      profilesDescription: "Each account can keep multiple crawl strategies. Manage recommended, hot, and search modes with their own schedules and manual runs here.",
+      profileRunSummary: "Run summary:",
+      lastRunLabel: "Last run: ",
+      nextRunLabel: "Next run: ",
+      profileModeLabel: "Profile mode",
+      maxPostsLabel: "Max posts per run",
+      queryTextLabel: "Search query",
+      queryTextPlaceholder: "For example AI agents or tech trends",
+      profileEnabledLabel: "Enable this profile",
+      profileEnabledHint: "Disabled profiles are skipped by the scheduler, but can still be triggered manually.",
+      saveProfile: "Save profile",
+      savingProfile: "Saving profile...",
+      triggerProfileNow: "Run this profile now",
+      addProfileTitle: "Add crawl profile",
+      addProfileDescription: "Add a new hot or search strategy to the current account. Search mode requires a query text.",
+      addProfile: "Add profile",
+      addingProfile: "Adding...",
+      emptyProfilesTitle: "No crawl profiles yet",
+      emptyProfilesDescription: "Create a profile first or save the binding again so the default recommended profile can be restored.",
       crawlConfigTitle: "Crawl config",
       crawlConfigDescription: "Adjust the crawl switch and interval without pasting credentials again.",
       autoCrawlTitle: "Automatic crawl",
@@ -1284,6 +1370,11 @@ const messages: Record<Locale, Messages> = {
         SCHEDULED: "Scheduled",
         RETRY: "Retry",
       },
+      crawlMode: {
+        RECOMMENDED: "Recommended",
+        HOT: "Hot",
+        SEARCH: "Search",
+      },
       postType: {
         POST: "Post",
         REPOST: "Repost",
@@ -1331,9 +1422,18 @@ const messages: Record<Locale, Messages> = {
         invalidCrawlIntervalInt: "The crawl interval must be an integer.",
         invalidCrawlIntervalMin: "The crawl interval must be at least 5 minutes.",
         invalidCrawlIntervalMax: "The crawl interval cannot exceed 1440 minutes.",
+        missingMaxPosts: "Please enter a max-post limit.",
+        invalidMaxPostsInt: "The max-post limit must be an integer.",
+        invalidMaxPostsMin: "The max-post limit must be at least 1.",
+        invalidMaxPostsMax: "The max-post limit cannot exceed 200.",
         missingBindingId: "Missing binding ID.",
+        missingProfileId: "Missing crawl profile ID.",
+        missingQueryText: "Search mode requires a query text.",
         bindingValidationFailed: "Binding form validation failed.",
+        profileValidationFailed: "Crawl profile validation failed.",
         bindingSaved: "Binding information has been saved.",
+        profileCreated: "Crawl profile has been created.",
+        profileUpdated: "Crawl profile has been updated.",
         configValidationFailed: "Crawl config validation failed.",
         configSaved: "Crawl config has been updated.",
         bindingRevalidated: "Binding status has been revalidated.",
@@ -1342,6 +1442,7 @@ const messages: Record<Locale, Messages> = {
         viewCurrentRun: "View current crawl run",
         viewTriggeredRun: "View this crawl run",
         manualCrawlTriggered: "Manual crawl was triggered. Current status: {status} ({triggerType}).",
+        profileManualTriggered: "Profile run was triggered. Current status: {status} ({triggerType}).",
       },
       api: {
         unauthorized: "Not signed in or the session has expired.",

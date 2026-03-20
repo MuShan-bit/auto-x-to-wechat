@@ -3,7 +3,7 @@ import {
   CrawlMode,
   CrawlRunStatus,
   CrawlTriggerType,
-  type Prisma,
+  Prisma,
 } from '@prisma/client';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -106,34 +106,41 @@ export class CrawlJobsService {
   claimJobForBinding(
     bindingId: string,
     triggerType: CrawlTriggerType = CrawlTriggerType.MANUAL,
+    profileId?: string,
   ) {
     return this.prisma.$transaction(async (tx) => {
       await this.backfillMissingDefaultProfiles(tx, bindingId);
 
-      const claimableJobs = await tx.$queryRaw<ClaimableCrawlJobRow[]>`
-        SELECT
-          cp.id AS "profileId",
-          cp.binding_id AS "bindingId",
-          cj.id AS "jobId"
-        FROM crawl_profiles cp
-        INNER JOIN x_account_bindings xab ON xab.id = cp.binding_id
-        LEFT JOIN crawl_jobs cj ON cj.binding_id = cp.binding_id
-        WHERE
-          cp.binding_id = ${bindingId}
-          AND cp.mode = 'RECOMMENDED'
-          AND xab.status = 'ACTIVE'
-          AND pg_try_advisory_xact_lock(hashtext(cp.binding_id))
-          AND NOT EXISTS (
-            SELECT 1
-            FROM crawl_runs cr
-            WHERE
-              cr.binding_id = cp.binding_id
-              AND cr.status IN ('QUEUED', 'RUNNING')
-          )
-        ORDER BY cp.created_at ASC
-        LIMIT 1
-        FOR UPDATE OF cp SKIP LOCKED
-      `;
+      const profileFilter = profileId
+        ? Prisma.sql`cp.id = ${profileId}`
+        : Prisma.sql`cp.mode = 'RECOMMENDED'`;
+
+      const claimableJobs = await tx.$queryRaw<ClaimableCrawlJobRow[]>(
+        Prisma.sql`
+          SELECT
+            cp.id AS "profileId",
+            cp.binding_id AS "bindingId",
+            cj.id AS "jobId"
+          FROM crawl_profiles cp
+          INNER JOIN x_account_bindings xab ON xab.id = cp.binding_id
+          LEFT JOIN crawl_jobs cj ON cj.binding_id = cp.binding_id
+          WHERE
+            cp.binding_id = ${bindingId}
+            AND ${profileFilter}
+            AND xab.status = 'ACTIVE'
+            AND pg_try_advisory_xact_lock(hashtext(cp.binding_id))
+            AND NOT EXISTS (
+              SELECT 1
+              FROM crawl_runs cr
+              WHERE
+                cr.binding_id = cp.binding_id
+                AND cr.status IN ('QUEUED', 'RUNNING')
+            )
+          ORDER BY cp.created_at ASC
+          LIMIT 1
+          FOR UPDATE OF cp SKIP LOCKED
+        `,
+      );
 
       return this.createClaimedRuns(tx, claimableJobs, triggerType);
     });

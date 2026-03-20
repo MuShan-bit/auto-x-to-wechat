@@ -26,6 +26,7 @@ type UnbindBindingResponse = {
 };
 
 const credentialSourceSchema = z.enum(["WEB_LOGIN", "COOKIE_IMPORT", "EXTENSION"]);
+const crawlModeSchema = z.enum(["RECOMMENDED", "HOT", "SEARCH"]);
 
 function getOptionalTextValue(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -78,6 +79,76 @@ function createBindingOperationSchema(
   return z.object({
     bindingId: z.string().trim().min(1, messages.actions.bindings.missingBindingId),
   });
+}
+
+function createCrawlProfileSchema(
+  messages: Awaited<ReturnType<typeof getRequestMessages>>["messages"],
+) {
+  return z
+    .object({
+      bindingId: z.string().trim().min(1, messages.actions.bindings.missingBindingId),
+      mode: crawlModeSchema,
+      enabled: z.boolean(),
+      intervalMinutes: z.coerce
+        .number({ error: messages.actions.bindings.missingCrawlInterval })
+        .int(messages.actions.bindings.invalidCrawlIntervalInt)
+        .min(5, messages.actions.bindings.invalidCrawlIntervalMin)
+        .max(1440, messages.actions.bindings.invalidCrawlIntervalMax),
+      queryText: z.string().trim().optional(),
+      maxPosts: z.coerce
+        .number({ error: messages.actions.bindings.missingMaxPosts })
+        .int(messages.actions.bindings.invalidMaxPostsInt)
+        .min(1, messages.actions.bindings.invalidMaxPostsMin)
+        .max(200, messages.actions.bindings.invalidMaxPostsMax),
+    })
+    .superRefine((value, context) => {
+      if (value.mode === "SEARCH" && !value.queryText) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: messages.actions.bindings.missingQueryText,
+          path: ["queryText"],
+        });
+      }
+    });
+}
+
+function createCrawlProfileOperationSchema(
+  messages: Awaited<ReturnType<typeof getRequestMessages>>["messages"],
+) {
+  return z.object({
+    bindingId: z.string().trim().min(1, messages.actions.bindings.missingBindingId),
+    profileId: z.string().trim().min(1, messages.actions.bindings.missingProfileId),
+  });
+}
+
+function createUpdateCrawlProfileSchema(
+  messages: Awaited<ReturnType<typeof getRequestMessages>>["messages"],
+) {
+  return z
+    .object({
+      mode: crawlModeSchema,
+      enabled: z.boolean(),
+      intervalMinutes: z.coerce
+        .number({ error: messages.actions.bindings.missingCrawlInterval })
+        .int(messages.actions.bindings.invalidCrawlIntervalInt)
+        .min(5, messages.actions.bindings.invalidCrawlIntervalMin)
+        .max(1440, messages.actions.bindings.invalidCrawlIntervalMax),
+      queryText: z.string().trim().optional(),
+      maxPosts: z.coerce
+        .number({ error: messages.actions.bindings.missingMaxPosts })
+        .int(messages.actions.bindings.invalidMaxPostsInt)
+        .min(1, messages.actions.bindings.invalidMaxPostsMin)
+        .max(200, messages.actions.bindings.invalidMaxPostsMax),
+    })
+    .superRefine((value, context) => {
+      if (value.mode === "SEARCH" && !value.queryText) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: messages.actions.bindings.missingQueryText,
+          path: ["queryText"],
+        });
+      }
+    });
 }
 
 function buildManualCrawlErrorState(
@@ -334,6 +405,149 @@ export async function triggerManualCrawlAction(
       actionHref: `/runs/${run.id}`,
       actionLabel: messages.actions.bindings.viewTriggeredRun,
       success: formatMessage(messages.actions.bindings.manualCrawlTriggered, {
+        status: run.status,
+        triggerType: run.triggerType,
+      }),
+    } satisfies BindingActionState;
+  } catch (error) {
+    return buildManualCrawlErrorState(error, messages);
+  }
+}
+
+export async function createCrawlProfileAction(
+  _previousState: BindingActionState,
+  formData: FormData,
+): Promise<BindingActionState> {
+  const { messages } = await getRequestMessages();
+  const crawlProfileSchema = createCrawlProfileSchema(messages);
+  const parsed = crawlProfileSchema.safeParse({
+    bindingId: getOptionalTextValue(formData, "bindingId"),
+    mode: getOptionalTextValue(formData, "mode"),
+    enabled: formData.get("enabled") === "on",
+    intervalMinutes: getOptionalTextValue(formData, "intervalMinutes"),
+    queryText: getOptionalTextValue(formData, "queryText"),
+    maxPosts: getOptionalTextValue(formData, "maxPosts"),
+  });
+
+  if (!parsed.success) {
+    return {
+      error:
+        parsed.error.issues[0]?.message ?? messages.actions.bindings.profileValidationFailed,
+    } satisfies BindingActionState;
+  }
+
+  try {
+    await apiRequest({
+      path: `/bindings/${parsed.data.bindingId}/crawl-profiles`,
+      method: "POST",
+      body: JSON.stringify({
+        mode: parsed.data.mode,
+        enabled: parsed.data.enabled,
+        intervalMinutes: parsed.data.intervalMinutes,
+        queryText: parsed.data.queryText,
+        maxPosts: parsed.data.maxPosts,
+      }),
+    });
+
+    revalidatePath("/bindings");
+
+    return {
+      success: messages.actions.bindings.profileCreated,
+    } satisfies BindingActionState;
+  } catch (error) {
+    return {
+      error: getApiErrorMessage(error, messages.actions.api.requestFailed),
+    } satisfies BindingActionState;
+  }
+}
+
+export async function updateCrawlProfileAction(
+  _previousState: BindingActionState,
+  formData: FormData,
+): Promise<BindingActionState> {
+  const { messages } = await getRequestMessages();
+  const profileOperationSchema = createCrawlProfileOperationSchema(messages);
+  const parsedOperation = profileOperationSchema.safeParse({
+    bindingId: getOptionalTextValue(formData, "bindingId"),
+    profileId: getOptionalTextValue(formData, "profileId"),
+  });
+
+  if (!parsedOperation.success) {
+    return {
+      error:
+        parsedOperation.error.issues[0]?.message ?? messages.actions.bindings.missingProfileId,
+    } satisfies BindingActionState;
+  }
+
+  const crawlProfileSchema = createUpdateCrawlProfileSchema(messages);
+  const parsed = crawlProfileSchema.safeParse({
+    mode: getOptionalTextValue(formData, "mode"),
+    enabled: formData.get("enabled") === "on",
+    intervalMinutes: getOptionalTextValue(formData, "intervalMinutes"),
+    queryText: getOptionalTextValue(formData, "queryText"),
+    maxPosts: getOptionalTextValue(formData, "maxPosts"),
+  });
+
+  if (!parsed.success) {
+    return {
+      error:
+        parsed.error.issues[0]?.message ?? messages.actions.bindings.profileValidationFailed,
+    } satisfies BindingActionState;
+  }
+
+  try {
+    await apiRequest({
+      path: `/bindings/${parsedOperation.data.bindingId}/crawl-profiles/${parsedOperation.data.profileId}`,
+      method: "PATCH",
+      body: JSON.stringify(parsed.data),
+    });
+
+    revalidatePath("/bindings");
+
+    return {
+      success: messages.actions.bindings.profileUpdated,
+    } satisfies BindingActionState;
+  } catch (error) {
+    return {
+      error: getApiErrorMessage(error, messages.actions.api.requestFailed),
+    } satisfies BindingActionState;
+  }
+}
+
+export async function triggerCrawlProfileAction(
+  _previousState: BindingActionState,
+  formData: FormData,
+): Promise<BindingActionState> {
+  const { messages } = await getRequestMessages();
+  const profileOperationSchema = createCrawlProfileOperationSchema(messages);
+  const parsed = profileOperationSchema.safeParse({
+    bindingId: getOptionalTextValue(formData, "bindingId"),
+    profileId: getOptionalTextValue(formData, "profileId"),
+  });
+
+  if (!parsed.success) {
+    return {
+      error:
+        parsed.error.issues[0]?.message ?? messages.actions.bindings.missingProfileId,
+    } satisfies BindingActionState;
+  }
+
+  try {
+    const run = await apiRequest<ManualCrawlRunResponse>({
+      path: `/bindings/${parsed.data.bindingId}/crawl-profiles/${parsed.data.profileId}/crawl-now`,
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+
+    revalidatePath("/bindings");
+    revalidatePath("/dashboard");
+    revalidatePath("/archives");
+    revalidatePath("/runs");
+
+    return {
+      actionHref: `/runs/${run.id}`,
+      actionLabel: messages.actions.bindings.viewTriggeredRun,
+      success: formatMessage(messages.actions.bindings.profileManualTriggered, {
         status: run.status,
         triggerType: run.triggerType,
       }),

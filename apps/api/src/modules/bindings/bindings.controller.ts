@@ -87,6 +87,17 @@ export class BindingsController {
       .then((payload) => serializeForJson(payload));
   }
 
+  @Post(':id/crawl-profiles/:profileId/crawl-now')
+  triggerManualCrawlProfile(
+    @CurrentUser() user: RequestUser,
+    @Param('id') bindingId: string,
+    @Param('profileId') profileId: string,
+  ) {
+    return this.bindingsService
+      .triggerManualCrawlProfile(user.id, bindingId, profileId)
+      .then((payload) => serializeForJson(payload));
+  }
+
   @Post(':id/validate')
   revalidate(@CurrentUser() user: RequestUser, @Param('id') bindingId: string) {
     return this.bindingsService

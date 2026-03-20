@@ -4,11 +4,14 @@ import Link from "next/link";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  createCrawlProfileAction,
   disableBindingAction,
   revalidateBindingAction,
   type BindingActionState,
+  triggerCrawlProfileAction,
   triggerManualCrawlAction,
   unbindBindingAction,
+  updateCrawlProfileAction,
   updateCrawlConfigAction,
   upsertBindingAction,
 } from "./actions";
@@ -27,6 +30,18 @@ import { formatMessage, getIntlLocale, getMessages, type Locale } from "@/lib/i1
 import { cn } from "@/lib/utils";
 
 export type BindingRecord = {
+  crawlProfiles: Array<{
+    enabled: boolean;
+    id: string;
+    intervalMinutes: number;
+    language: string | null;
+    lastRunAt: string | null;
+    maxPosts: number;
+    mode: "RECOMMENDED" | "HOT" | "SEARCH";
+    nextRunAt: string | null;
+    queryText: string | null;
+    region: string | null;
+  }>;
   id: string;
   xUserId: string;
   username: string;
@@ -49,7 +64,7 @@ export type BindingRecord = {
         nextRunAt: string | null;
       }
     | null;
-    };
+};
 
 type BindingConsoleProps = {
   browserDesktopUrl: string | null;
@@ -224,6 +239,18 @@ export function BindingConsole({
   );
   const [manualCrawlState, manualCrawlAction, isManualCrawlPending] = useActionState(
     triggerManualCrawlAction,
+    initialActionState,
+  );
+  const [createProfileState, createProfileAction, isCreateProfilePending] = useActionState(
+    createCrawlProfileAction,
+    initialActionState,
+  );
+  const [updateProfileState, updateProfileAction, isUpdateProfilePending] = useActionState(
+    updateCrawlProfileAction,
+    initialActionState,
+  );
+  const [manualProfileState, manualProfileAction, isManualProfilePending] = useActionState(
+    triggerCrawlProfileAction,
     initialActionState,
   );
   const [disableState, disableAction, isDisablePending] = useActionState(
@@ -625,6 +652,268 @@ export function BindingConsole({
 
         {currentBinding ? (
           <>
+            <Card className="rounded-[2rem] border-border/70 bg-white/90 shadow-[0_24px_80px_-40px_rgba(45,77,63,0.22)] dark:border-white/10 dark:bg-white/6 dark:shadow-[0_24px_80px_-40px_rgba(0,0,0,0.5)]">
+              <CardHeader>
+                <CardTitle className="text-xl">{messages.bindings.profilesTitle}</CardTitle>
+                <CardDescription>{messages.bindings.profilesDescription}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <FormFeedback
+                  state={
+                    updateProfileState.error || updateProfileState.success
+                      ? updateProfileState
+                      : manualProfileState
+                  }
+                />
+                {currentBinding.crawlProfiles.length > 0 ? (
+                  <div className="space-y-4">
+                    {currentBinding.crawlProfiles.map((profile) => (
+                      <div
+                        key={profile.id}
+                        className="rounded-[1.75rem] border border-border/70 bg-[#fcfaf5] p-5 dark:border-white/10 dark:bg-white/8"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge className="rounded-full bg-[#eef4f0] text-[#2d4d3f] dark:bg-[#223228] dark:text-[#d8e2db]">
+                                {messages.enums.crawlMode[profile.mode]}
+                              </Badge>
+                              <Badge
+                                className={cn(
+                                  "rounded-full",
+                                  profile.enabled
+                                    ? "bg-[#2d4d3f] text-white dark:bg-[#d8e2db] dark:text-[#18201b]"
+                                    : "bg-slate-200 text-slate-700 dark:bg-white/10 dark:text-white/80",
+                                )}
+                              >
+                                {profile.enabled
+                                  ? messages.bindings.crawlEnabled
+                                  : messages.bindings.crawlDisabled}
+                              </Badge>
+                            </div>
+                            <p className="mt-3 text-sm text-muted-foreground">
+                              {messages.bindings.profileRunSummary}{" "}
+                              {messages.bindings.lastRunLabel}
+                              {formatDateTime(profile.lastRunAt, locale, messages.common.notRecorded)}
+                              {" · "}
+                              {messages.bindings.nextRunLabel}
+                              {formatDateTime(profile.nextRunAt, locale, messages.common.notScheduled)}
+                            </p>
+                          </div>
+                        </div>
+
+                        <form
+                          key={`profile-${profile.id}`}
+                          action={updateProfileAction}
+                          className="mt-4 space-y-4"
+                        >
+                          <input type="hidden" name="bindingId" value={currentBinding.id} />
+                          <input type="hidden" name="profileId" value={profile.id} />
+                          <input type="hidden" name="mode" value={profile.mode} />
+
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-2">
+                              <FieldLabel htmlFor={`interval-${profile.id}`}>
+                                {messages.bindings.crawlIntervalLabel}
+                              </FieldLabel>
+                              <Input
+                                id={`interval-${profile.id}`}
+                                name="intervalMinutes"
+                                type="number"
+                                min={5}
+                                max={1440}
+                                defaultValue={String(profile.intervalMinutes)}
+                                className="h-11 rounded-2xl border-border/70 bg-white px-4 dark:border-white/10 dark:bg-white/10"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <FieldLabel htmlFor={`max-posts-${profile.id}`}>
+                                {messages.bindings.maxPostsLabel}
+                              </FieldLabel>
+                              <Input
+                                id={`max-posts-${profile.id}`}
+                                name="maxPosts"
+                                type="number"
+                                min={1}
+                                max={200}
+                                defaultValue={String(profile.maxPosts)}
+                                className="h-11 rounded-2xl border-border/70 bg-white px-4 dark:border-white/10 dark:bg-white/10"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <FieldLabel htmlFor={`query-${profile.id}`}>
+                              {messages.bindings.queryTextLabel}
+                            </FieldLabel>
+                            <Input
+                              id={`query-${profile.id}`}
+                              name="queryText"
+                              defaultValue={profile.queryText ?? ""}
+                              disabled={profile.mode !== "SEARCH"}
+                              placeholder={messages.bindings.queryTextPlaceholder}
+                              className="h-11 rounded-2xl border-border/70 bg-white px-4 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/10"
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-white px-4 py-3 dark:border-white/10 dark:bg-white/10">
+                            <div>
+                              <p className="font-medium text-foreground">{messages.bindings.profileEnabledLabel}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {messages.bindings.profileEnabledHint}
+                              </p>
+                            </div>
+                            <input
+                              type="checkbox"
+                              name="enabled"
+                              defaultChecked={profile.enabled}
+                              className="h-4 w-4 rounded border-border text-[#2d4d3f] focus:ring-[#2d4d3f] dark:border-white/20 dark:bg-white/10 dark:text-[#d8e2db] dark:focus:ring-[#d8e2db]"
+                            />
+                          </div>
+
+                          <div className="flex flex-wrap gap-3">
+                            <Button
+                              type="submit"
+                              className="rounded-full bg-[#2d4d3f] px-5 hover:bg-[#20372d] dark:bg-[#d8e2db] dark:text-[#18201b] dark:hover:bg-[#c8d3cb]"
+                              disabled={isUpdateProfilePending}
+                            >
+                              {isUpdateProfilePending
+                                ? messages.bindings.savingProfile
+                                : messages.bindings.saveProfile}
+                            </Button>
+                          </div>
+                        </form>
+
+                        <form
+                          key={`profile-manual-${profile.id}`}
+                          action={manualProfileAction}
+                          className="mt-3"
+                        >
+                          <input type="hidden" name="bindingId" value={currentBinding.id} />
+                          <input type="hidden" name="profileId" value={profile.id} />
+                          <Button
+                            type="submit"
+                            variant="outline"
+                            className="rounded-full px-5"
+                            disabled={isManualProfilePending || currentBinding.status !== "ACTIVE"}
+                          >
+                            {isManualProfilePending
+                              ? messages.bindings.triggeringNow
+                              : messages.bindings.triggerProfileNow}
+                          </Button>
+                        </form>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    title={messages.bindings.emptyProfilesTitle}
+                    description={messages.bindings.emptyProfilesDescription}
+                  />
+                )}
+
+                <div className="rounded-[1.75rem] border border-dashed border-border/70 bg-[#f8faf8] p-5 dark:border-white/10 dark:bg-white/8">
+                  <h3 className="text-lg font-semibold text-foreground">
+                    {messages.bindings.addProfileTitle}
+                  </h3>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                    {messages.bindings.addProfileDescription}
+                  </p>
+                  <form
+                    key={`profile-create-${currentBinding.id}`}
+                    action={createProfileAction}
+                    className="mt-4 space-y-4"
+                  >
+                    <input type="hidden" name="bindingId" value={currentBinding.id} />
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <FieldLabel htmlFor={`new-profile-mode-${currentBinding.id}`}>
+                          {messages.bindings.profileModeLabel}
+                        </FieldLabel>
+                        <select
+                          id={`new-profile-mode-${currentBinding.id}`}
+                          name="mode"
+                          defaultValue="HOT"
+                          className="h-11 w-full rounded-2xl border border-border/70 bg-white px-4 text-sm text-foreground outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/40 dark:border-white/10 dark:bg-white/10"
+                        >
+                          <option value="RECOMMENDED">
+                            {messages.enums.crawlMode.RECOMMENDED}
+                          </option>
+                          <option value="HOT">{messages.enums.crawlMode.HOT}</option>
+                          <option value="SEARCH">{messages.enums.crawlMode.SEARCH}</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <FieldLabel htmlFor={`new-profile-interval-${currentBinding.id}`}>
+                          {messages.bindings.crawlIntervalLabel}
+                        </FieldLabel>
+                        <Input
+                          id={`new-profile-interval-${currentBinding.id}`}
+                          name="intervalMinutes"
+                          type="number"
+                          min={5}
+                          max={1440}
+                          defaultValue="60"
+                          className="h-11 rounded-2xl border-border/70 bg-white px-4 dark:border-white/10 dark:bg-white/10"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <FieldLabel htmlFor={`new-profile-query-${currentBinding.id}`}>
+                          {messages.bindings.queryTextLabel}
+                        </FieldLabel>
+                        <Input
+                          id={`new-profile-query-${currentBinding.id}`}
+                          name="queryText"
+                          placeholder={messages.bindings.queryTextPlaceholder}
+                          className="h-11 rounded-2xl border-border/70 bg-white px-4 dark:border-white/10 dark:bg-white/10"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <FieldLabel htmlFor={`new-profile-max-posts-${currentBinding.id}`}>
+                          {messages.bindings.maxPostsLabel}
+                        </FieldLabel>
+                        <Input
+                          id={`new-profile-max-posts-${currentBinding.id}`}
+                          name="maxPosts"
+                          type="number"
+                          min={1}
+                          max={200}
+                          defaultValue="20"
+                          className="h-11 rounded-2xl border-border/70 bg-white px-4 dark:border-white/10 dark:bg-white/10"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-white px-4 py-3 dark:border-white/10 dark:bg-white/10">
+                      <div>
+                        <p className="font-medium text-foreground">{messages.bindings.profileEnabledLabel}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {messages.bindings.profileEnabledHint}
+                        </p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        name="enabled"
+                        defaultChecked
+                        className="h-4 w-4 rounded border-border text-[#2d4d3f] focus:ring-[#2d4d3f] dark:border-white/20 dark:bg-white/10 dark:text-[#d8e2db] dark:focus:ring-[#d8e2db]"
+                      />
+                    </div>
+                    <FormFeedback state={createProfileState} />
+                    <Button
+                      type="submit"
+                      className="rounded-full bg-[#7f5a26] px-5 hover:bg-[#65471f] dark:bg-[#f2c58c] dark:text-[#2c2114] dark:hover:bg-[#e5b775]"
+                      disabled={isCreateProfilePending}
+                    >
+                      {isCreateProfilePending
+                        ? messages.bindings.addingProfile
+                        : messages.bindings.addProfile}
+                    </Button>
+                  </form>
+                </div>
+              </CardContent>
+            </Card>
+
             <Card className="rounded-[2rem] border-border/70 bg-white/90 shadow-[0_24px_80px_-40px_rgba(45,77,63,0.28)] dark:border-white/10 dark:bg-white/6 dark:shadow-[0_24px_80px_-40px_rgba(0,0,0,0.5)]">
               <CardHeader>
                 <CardTitle className="text-xl">{messages.bindings.crawlConfigTitle}</CardTitle>
