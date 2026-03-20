@@ -72,7 +72,7 @@ describe('renderRichTextToHtml', () => {
     });
 
     expect(html).toBe(
-      '<p>&lt;script&gt;alert(1)&lt;/script&gt;<a data-node-type="link" href="about:blank" target="_blank" rel="noreferrer noopener">bad link</a></p><aside data-block-type="relation" data-relation-type="REPLY"><p>回复帖子 @&lt;script&gt;alert(2)&lt;/script&gt;</p><a data-block-link="relation" href="about:blank" target="_blank" rel="noreferrer noopener">查看原帖</a></aside><figure data-block-type="media" data-media-type="VIDEO"><video controls preload="metadata" src="about:blank" poster="https://images.example.com/poster.png"></video></figure>',
+      '<p>&lt;script&gt;alert(1)&lt;/script&gt;<a data-node-type="link" href="about:blank" target="_blank" rel="noreferrer noopener">bad link</a></p><aside data-block-type="relation" data-relation-type="REPLY"><p>回复帖子 @&lt;script&gt;alert(2)&lt;/script&gt;</p><a data-block-link="relation" href="about:blank" target="_blank" rel="noreferrer noopener">查看原帖</a></aside><figure data-block-type="media" data-media-type="VIDEO"><video src="about:blank" controls playsinline preload="metadata" poster="https://images.example.com/poster.png" crossorigin="anonymous"></video></figure>',
     );
   });
 });

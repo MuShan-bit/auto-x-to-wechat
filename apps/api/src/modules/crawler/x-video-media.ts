@@ -43,6 +43,16 @@ function normalizeUrl(value?: string | null) {
   return normalized;
 }
 
+function getNormalizedUrlPathname(value: string) {
+  const normalized = normalizeUrl(value) ?? value.trim();
+
+  try {
+    return new URL(normalized).pathname.toLowerCase();
+  } catch {
+    return normalized.split('?')[0]?.split('#')[0]?.toLowerCase() ?? '';
+  }
+}
+
 function extractDirectMediaArrays(candidate: UnknownRecord) {
   const arrays: unknown[][] = [];
   const legacy = isRecord(candidate.legacy) ? candidate.legacy : null;
@@ -71,7 +81,7 @@ function extractDirectMediaArrays(candidate: UnknownRecord) {
 function selectBestVideoVariant(variants: unknown[]) {
   const candidates = variants
     .flatMap((item) => {
-      if (!isRecord(item) || typeof item.url !== "string") {
+      if (!isRecord(item) || typeof item.url !== 'string') {
         return [];
       }
 
@@ -84,38 +94,37 @@ function selectBestVideoVariant(variants: unknown[]) {
       return [
         {
           bitrate:
-            typeof item.bitrate === "number" && Number.isFinite(item.bitrate)
+            typeof item.bitrate === 'number' && Number.isFinite(item.bitrate)
               ? item.bitrate
               : 0,
           contentType:
-            typeof item.content_type === "string" ? item.content_type : "",
+            typeof item.content_type === 'string' ? item.content_type : '',
           sourceUrl,
         },
       ];
     })
-    .filter((item) => !item.sourceUrl.endsWith(".m4s"));
+    .filter((item) => !item.sourceUrl.endsWith('.m4s'));
 
   const mp4Variants = candidates
-    .filter((item) => item.contentType === "video/mp4")
+    .filter((item) => item.contentType === 'video/mp4')
     .sort((left, right) => right.bitrate - left.bitrate);
 
   if (mp4Variants[0]) {
     return mp4Variants[0].sourceUrl;
   }
 
-  return candidates.find((item) =>
-    item.contentType.includes("mpegURL"),
-  )?.sourceUrl;
+  return candidates.find((item) => item.contentType.includes('mpegURL'))
+    ?.sourceUrl;
 }
 
 export function isEphemeralVideoUrl(value?: string | null) {
-  if (typeof value !== "string") {
+  if (typeof value !== 'string') {
     return false;
   }
 
   const normalized = value.trim();
 
-  return normalized.startsWith("blob:") || normalized === "about:blank";
+  return normalized.startsWith('blob:') || normalized === 'about:blank';
 }
 
 export function extractVideoMediaIdentity(value?: string | null) {
@@ -137,7 +146,7 @@ export function extractVideoMediaIdentity(value?: string | null) {
       continue;
     }
 
-    const kind = match[1].replace("_thumb", "");
+    const kind = match[1].replace('_thumb', '');
     const id = match[2];
 
     return `${kind}:${id}`;
@@ -193,9 +202,9 @@ export function extractResolvedVideoMediaFromGraphqlPayload(
         }
 
         const mediaType =
-          typeof mediaItem.type === "string" ? mediaItem.type : "";
+          typeof mediaItem.type === 'string' ? mediaItem.type : '';
 
-        if (mediaType !== "video" && mediaType !== "animated_gif") {
+        if (mediaType !== 'video' && mediaType !== 'animated_gif') {
           continue;
         }
 
@@ -213,9 +222,9 @@ export function extractResolvedVideoMediaFromGraphqlPayload(
 
         const previewUrl =
           normalizeUrl(
-            typeof mediaItem.media_url_https === "string"
+            typeof mediaItem.media_url_https === 'string'
               ? mediaItem.media_url_https
-              : typeof mediaItem.media_url === "string"
+              : typeof mediaItem.media_url === 'string'
                 ? mediaItem.media_url
                 : undefined,
           ) ?? undefined;
@@ -223,11 +232,11 @@ export function extractResolvedVideoMediaFromGraphqlPayload(
           ? mediaItem.original_info
           : null;
         const width =
-          originalInfo && typeof originalInfo.w === "number"
+          originalInfo && typeof originalInfo.w === 'number'
             ? originalInfo.w
             : undefined;
         const height =
-          originalInfo && typeof originalInfo.h === "number"
+          originalInfo && typeof originalInfo.h === 'number'
             ? originalInfo.h
             : undefined;
         const identity =
@@ -252,20 +261,33 @@ export function extractResolvedVideoMediaFromGraphqlPayload(
 
 function getNetworkRequestScore(url: string) {
   const normalized = normalizeUrl(url) ?? url;
+  const pathname = getNormalizedUrlPathname(normalized);
   const resolutionMatch = normalized.match(/\/(\d+)x(\d+)\//);
   const resolutionScore = resolutionMatch
     ? Number(resolutionMatch[1]) * Number(resolutionMatch[2])
     : 0;
 
-  if (normalized.endsWith(".mp4")) {
+  if (pathname.endsWith('.mp4')) {
     return 20_000_000 + resolutionScore;
   }
 
-  if (normalized.includes(".m3u8")) {
+  if (pathname.endsWith('.m3u8')) {
     return 10_000_000 + resolutionScore;
   }
 
   return resolutionScore;
+}
+
+export function needsResolvedVideoSource(value?: string | null) {
+  if (isEphemeralVideoUrl(value)) {
+    return true;
+  }
+
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  return getNormalizedUrlPathname(value).endsWith('.m3u8');
 }
 
 export function extractResolvedVideoMediaFromNetworkRequests(
@@ -282,7 +304,7 @@ export function extractResolvedVideoMediaFromNetworkRequests(
   for (const requestUrl of requestUrls) {
     const sourceUrl = normalizeUrl(requestUrl);
 
-    if (!sourceUrl || sourceUrl.endsWith(".m4s")) {
+    if (!sourceUrl || sourceUrl.endsWith('.m4s')) {
       continue;
     }
 
@@ -313,13 +335,13 @@ export function filterDuplicateVideoPosterImages<T extends MediaLike>(
 ) {
   const videoPosterIdentities = new Set(
     mediaItems
-      .filter((item) => item.mediaType === "VIDEO")
+      .filter((item) => item.mediaType === 'VIDEO')
       .map((item) => extractVideoMediaIdentity(item.previewUrl))
       .filter((item): item is string => item !== null),
   );
 
   return mediaItems.filter((item) => {
-    if (item.mediaType !== "IMAGE") {
+    if (item.mediaType !== 'IMAGE') {
       return true;
     }
 
@@ -354,7 +376,10 @@ export function matchResolvedVideoMedia<T extends MediaLike>(
   }
 
   return mediaItems.map((item) => {
-    if (item.mediaType !== "VIDEO" || !isEphemeralVideoUrl(item.sourceUrl)) {
+    if (
+      item.mediaType !== 'VIDEO' ||
+      !needsResolvedVideoSource(item.sourceUrl)
+    ) {
       return item;
     }
 

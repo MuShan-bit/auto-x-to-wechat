@@ -36,8 +36,8 @@ import {
   extractResolvedVideoMediaFromGraphqlPayload,
   extractResolvedVideoMediaFromNetworkRequests,
   filterDuplicateVideoPosterImages,
-  isEphemeralVideoUrl,
   matchResolvedVideoMedia,
+  needsResolvedVideoSource,
   type ResolvedVideoMediaSource,
 } from './x-video-media';
 import {
@@ -625,16 +625,19 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
     const candidates = currentPage
       ? [currentPage, ...pages.filter((page) => page !== currentPage)]
       : pages;
-    const preferredPage = candidates.reduce((best, candidate) => {
-      if (!best) {
-        return candidate;
-      }
+    const preferredPage = candidates.reduce(
+      (best, candidate) => {
+        if (!best) {
+          return candidate;
+        }
 
-      return this.scoreInteractiveLoginPage(candidate) >=
-        this.scoreInteractiveLoginPage(best)
-        ? candidate
-        : best;
-    }, null as Page | null);
+        return this.scoreInteractiveLoginPage(candidate) >=
+          this.scoreInteractiveLoginPage(best)
+          ? candidate
+          : best;
+      },
+      null as Page | null,
+    );
 
     if (!preferredPage) {
       return null;
@@ -1211,10 +1214,12 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
               rawText,
               statusLinkCandidates,
               timeElementCount: article.querySelectorAll('time').length,
-              tweetTextCount:
-                article.querySelectorAll('[data-testid="tweetText"]').length,
-              userNameBlockCount:
-                article.querySelectorAll('[data-testid="User-Name"]').length,
+              tweetTextCount: article.querySelectorAll(
+                '[data-testid="tweetText"]',
+              ).length,
+              userNameBlockCount: article.querySelectorAll(
+                '[data-testid="User-Name"]',
+              ).length,
               xPostId,
             },
           };
@@ -1222,7 +1227,8 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
         .filter(Boolean);
     }, maxPosts);
 
-    const rawPosts = rawPostsUnknown as Array<ScrapedVisiblePostSnapshot | null>;
+    const rawPosts =
+      rawPostsUnknown as Array<ScrapedVisiblePostSnapshot | null>;
 
     return rawPosts
       .filter((item): item is ScrapedVisiblePostSnapshot => item !== null)
@@ -1255,7 +1261,8 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
       if (
         !post.media?.some(
           (item) =>
-            item.mediaType === 'VIDEO' && isEphemeralVideoUrl(item.sourceUrl),
+            item.mediaType === 'VIDEO' &&
+            needsResolvedVideoSource(item.sourceUrl),
         )
       ) {
         post.media = filterDuplicateVideoPosterImages(post.media ?? []);
@@ -1327,9 +1334,9 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
 
       if (videoCount > 0) {
         await videoLocator.scrollIntoViewIfNeeded().catch(() => undefined);
-        await videoLocator.click({ force: true, timeout: 1500 }).catch(
-          () => undefined,
-        );
+        await videoLocator
+          .click({ force: true, timeout: 1500 })
+          .catch(() => undefined);
         await page.waitForTimeout(1800);
       }
 

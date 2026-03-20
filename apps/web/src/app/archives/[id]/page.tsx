@@ -1,14 +1,31 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ExternalLink, GalleryVerticalEnd, Languages, Link2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ExternalLink,
+  GalleryVerticalEnd,
+  Languages,
+  Link2,
+} from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { sanitizeArchiveHtml } from "@/lib/archive-html";
-import { ApiRequestError, apiRequest, getApiErrorMessage } from "@/lib/api-client";
+import {
+  ApiRequestError,
+  apiRequest,
+  getApiErrorMessage,
+} from "@/lib/api-client";
 import { formatMessage, getIntlLocale, type Locale } from "@/lib/i18n";
+import { buildMediaProxyUrl } from "@/lib/media-proxy";
 import { getRequestMessages } from "@/lib/request-locale";
 
 type ArchiveDetailPageProps = {
@@ -57,7 +74,13 @@ type ArchiveDetailResponse = {
   };
   firstCrawlRun: null | {
     id: string;
-    status: "QUEUED" | "RUNNING" | "SUCCESS" | "PARTIAL_FAILED" | "FAILED" | "CANCELLED";
+    status:
+      | "QUEUED"
+      | "RUNNING"
+      | "SUCCESS"
+      | "PARTIAL_FAILED"
+      | "FAILED"
+      | "CANCELLED";
     triggerType: "MANUAL" | "SCHEDULED" | "RETRY";
   };
 };
@@ -102,7 +125,9 @@ async function getArchiveDetail(id: string) {
   }
 }
 
-export default async function ArchiveDetailPage({ params }: ArchiveDetailPageProps) {
+export default async function ArchiveDetailPage({
+  params,
+}: ArchiveDetailPageProps) {
   const { locale, messages } = await getRequestMessages();
   const { id } = await params;
   const { archive, error } = await getArchiveDetail(id);
@@ -111,7 +136,11 @@ export default async function ArchiveDetailPage({ params }: ArchiveDetailPagePro
     <div className="space-y-8">
       <PageHeader
         eyebrow={messages.archiveDetail.eyebrow}
-        title={archive ? `@${archive.authorUsername}` : messages.archiveDetail.titleFallback}
+        title={
+          archive
+            ? `@${archive.authorUsername}`
+            : messages.archiveDetail.titleFallback
+        }
         description={
           archive
             ? messages.archiveDetail.descriptionReady
@@ -167,7 +196,8 @@ export default async function ArchiveDetailPage({ params }: ArchiveDetailPagePro
                     {messages.enums.postType[archive.postType]}
                   </Badge>
                   <Badge className="rounded-full bg-[#f5efe4] text-[#7f5a26] dark:bg-[#3d3124] dark:text-[#f2c58c]">
-                    {messages.archiveDetail.archivedAt} {formatDateTime(archive.archivedAt, locale)}
+                    {messages.archiveDetail.archivedAt}{" "}
+                    {formatDateTime(archive.archivedAt, locale)}
                   </Badge>
                   {archive.language ? (
                     <Badge className="rounded-full bg-[#eef4f0] text-[#2d4d3f] dark:bg-[#223228] dark:text-[#d8e2db]">
@@ -186,7 +216,10 @@ export default async function ArchiveDetailPage({ params }: ArchiveDetailPagePro
                     ) : null}
                   </CardTitle>
                   <CardDescription className="leading-6">
-                    {messages.archiveDetail.sourceBinding}：@{archive.binding.username} · {messages.archiveDetail.sourceCreatedAt}：{formatDateTime(archive.sourceCreatedAt, locale)}
+                    {messages.archiveDetail.sourceBinding}：@
+                    {archive.binding.username} ·{" "}
+                    {messages.archiveDetail.sourceCreatedAt}：
+                    {formatDateTime(archive.sourceCreatedAt, locale)}
                   </CardDescription>
                 </div>
               </CardHeader>
@@ -194,10 +227,9 @@ export default async function ArchiveDetailPage({ params }: ArchiveDetailPagePro
                 <article
                   className="rounded-[2rem] bg-[#fcfaf5] p-6 text-sm text-foreground [&_a]:font-medium [&_a]:text-[#2d4d3f] [&_a]:underline-offset-4 hover:[&_a]:underline [&_figure]:overflow-hidden [&_figure]:rounded-3xl [&_figure]:border [&_figure]:border-border/70 [&_figure]:bg-white [&_figure]:p-3 [&_img]:w-full [&_img]:rounded-2xl [&_p]:leading-8 [&_video]:w-full [&_video]:rounded-2xl dark:bg-[#161b17] dark:[&_a]:text-[#d8e2db] dark:[&_figure]:border-white/10 dark:[&_figure]:bg-white/8"
                   dangerouslySetInnerHTML={{
-                    __html:
-                      archive.renderedHtml
-                        ? sanitizeArchiveHtml(archive.renderedHtml)
-                        : `<p>${archive.rawText.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")}</p>`,
+                    __html: archive.renderedHtml
+                      ? sanitizeArchiveHtml(archive.renderedHtml)
+                      : `<p>${archive.rawText.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")}</p>`,
                   }}
                 />
 
@@ -231,7 +263,8 @@ export default async function ArchiveDetailPage({ params }: ArchiveDetailPagePro
                       {messages.archiveDetail.metrics.likesViews}
                     </p>
                     <p className="mt-2 text-2xl font-semibold text-foreground">
-                      {formatMetric(archive.favoriteCount)} / {formatMetric(archive.viewCount)}
+                      {formatMetric(archive.favoriteCount)} /{" "}
+                      {formatMetric(archive.viewCount)}
                     </p>
                   </div>
                 </div>
@@ -242,7 +275,9 @@ export default async function ArchiveDetailPage({ params }: ArchiveDetailPagePro
           <div className="space-y-6">
             <Card className="rounded-[2rem] border-border/70 bg-white/92 shadow-[0_24px_80px_-40px_rgba(87,62,22,0.24)] dark:border-white/10 dark:bg-white/6 dark:shadow-[0_24px_80px_-40px_rgba(0,0,0,0.5)]">
               <CardHeader>
-                <CardTitle className="text-2xl">{messages.archiveDetail.sourceContextTitle}</CardTitle>
+                <CardTitle className="text-2xl">
+                  {messages.archiveDetail.sourceContextTitle}
+                </CardTitle>
                 <CardDescription className="leading-6">
                   {messages.archiveDetail.sourceContextDescription}
                 </CardDescription>
@@ -266,9 +301,12 @@ export default async function ArchiveDetailPage({ params }: ArchiveDetailPagePro
                   <p className="text-xs uppercase tracking-[0.2em] text-[#2d4d3f] dark:text-[#d8e2db]">
                     {messages.archiveDetail.binding}
                   </p>
-                  <p className="mt-2 text-sm font-medium text-foreground">@{archive.binding.username}</p>
+                  <p className="mt-2 text-sm font-medium text-foreground">
+                    @{archive.binding.username}
+                  </p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    {archive.binding.displayName ?? messages.common.noDisplayName}
+                    {archive.binding.displayName ??
+                      messages.common.noDisplayName}
                   </p>
                 </div>
                 {archive.firstCrawlRun ? (
@@ -277,7 +315,12 @@ export default async function ArchiveDetailPage({ params }: ArchiveDetailPagePro
                       {messages.archiveDetail.firstRun}
                     </p>
                     <p className="mt-2 text-sm font-medium text-foreground">
-                      {messages.enums.runStatus[archive.firstCrawlRun.status]} · {messages.enums.triggerType[archive.firstCrawlRun.triggerType]}
+                      {messages.enums.runStatus[archive.firstCrawlRun.status]} ·{" "}
+                      {
+                        messages.enums.triggerType[
+                          archive.firstCrawlRun.triggerType
+                        ]
+                      }
                     </p>
                     <Link
                       href={`/runs/${archive.firstCrawlRun.id}`}
@@ -297,7 +340,9 @@ export default async function ArchiveDetailPage({ params }: ArchiveDetailPagePro
                     <GalleryVerticalEnd className="size-5" />
                   </div>
                   <div>
-                    <CardTitle className="text-2xl">{messages.archiveDetail.mediaTitle}</CardTitle>
+                    <CardTitle className="text-2xl">
+                      {messages.archiveDetail.mediaTitle}
+                    </CardTitle>
                     <CardDescription className="leading-6">
                       {messages.archiveDetail.mediaDescription}
                     </CardDescription>
@@ -312,6 +357,26 @@ export default async function ArchiveDetailPage({ params }: ArchiveDetailPagePro
                         key={item.id}
                         className="rounded-3xl border border-border/70 bg-[#fcfaf5] p-4 dark:border-white/10 dark:bg-white/8"
                       >
+                        {item.mediaType === "IMAGE" ? (
+                          <img
+                            src={item.sourceUrl}
+                            alt=""
+                            className="mt-4 w-full rounded-2xl border border-border/70 bg-white object-cover dark:border-white/10 dark:bg-white/8"
+                          />
+                        ) : (
+                          <video
+                            autoPlay={item.mediaType === "GIF"}
+                            className="mt-4 w-full rounded-2xl border border-border/70 bg-black dark:border-white/10"
+                            controls={item.mediaType === "VIDEO"}
+                            crossOrigin="anonymous"
+                            loop={item.mediaType === "GIF"}
+                            muted={item.mediaType === "GIF"}
+                            playsInline
+                            poster={item.previewUrl ?? undefined}
+                            preload="metadata"
+                            src={buildMediaProxyUrl(item.sourceUrl)}
+                          />
+                        )}
                         <div className="flex flex-wrap items-center gap-3">
                           <Badge className="rounded-full bg-[#2d4d3f] text-white">
                             {item.mediaType}
@@ -360,9 +425,12 @@ export default async function ArchiveDetailPage({ params }: ArchiveDetailPagePro
                           </Badge>
                           <p className="text-sm text-foreground">
                             {relation.targetAuthorUsername
-                              ? formatMessage(messages.archiveDetail.targetAuthor, {
-                                  username: relation.targetAuthorUsername,
-                                })
+                              ? formatMessage(
+                                  messages.archiveDetail.targetAuthor,
+                                  {
+                                    username: relation.targetAuthorUsername,
+                                  },
+                                )
                               : messages.common.noTargetAuthor}
                           </p>
                         </div>

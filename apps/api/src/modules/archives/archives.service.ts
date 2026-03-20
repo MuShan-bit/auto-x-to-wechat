@@ -14,12 +14,15 @@ import { CredentialCryptoService } from '../crypto/credential-crypto.service';
 import type { RealBrowserCredentialPayload } from '../crawler/x-browser.types';
 import { XBrowserAutomationService } from '../crawler/x-browser-automation.service';
 import {
-  isEphemeralVideoUrl,
   matchResolvedVideoMedia,
+  needsResolvedVideoSource,
   type ResolvedVideoMediaSource,
 } from '../crawler/x-video-media';
 import { PrismaService } from '../prisma/prisma.service';
-import { type RichTextDocument, type RichTextMediaBlock } from './rich-text.converter';
+import {
+  type RichTextDocument,
+  type RichTextMediaBlock,
+} from './rich-text.converter';
 import { renderRichTextToHtml } from './rich-text.renderer';
 
 type CreateArchivedPostMediaInput = {
@@ -344,7 +347,7 @@ export class ArchivesService {
   ) {
     const videoItems = archivedPost.mediaItems.filter(
       (item) =>
-        item.mediaType === 'VIDEO' && isEphemeralVideoUrl(item.sourceUrl),
+        item.mediaType === 'VIDEO' && needsResolvedVideoSource(item.sourceUrl),
     );
 
     if (videoItems.length === 0) {

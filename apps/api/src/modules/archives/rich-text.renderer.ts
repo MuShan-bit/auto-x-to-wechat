@@ -80,7 +80,11 @@ export function renderRichTextToHtml(document: RichTextDocument) {
           const previewUrl = sanitizeUrl(block.previewUrl);
 
           if (block.mediaType === 'VIDEO') {
-            return `<figure data-block-type="media" data-media-type="${block.mediaType}"><video controls preload="metadata" src="${sourceUrl}" poster="${previewUrl}"></video></figure>`;
+            return `<figure data-block-type="media" data-media-type="${block.mediaType}"><video src="${sourceUrl}" controls playsinline preload="metadata" poster="${previewUrl}" crossorigin="anonymous"></video></figure>`;
+          }
+
+          if (block.mediaType === 'GIF') {
+            return `<figure data-block-type="media" data-media-type="${block.mediaType}"><video src="${sourceUrl}" autoplay loop muted playsinline preload="metadata" poster="${previewUrl}" crossorigin="anonymous"></video></figure>`;
           }
 
           return `<figure data-block-type="media" data-media-type="${block.mediaType}"><img src="${sourceUrl}" alt="" loading="lazy" /></figure>`;

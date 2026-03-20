@@ -6,6 +6,7 @@ import {
   filterDuplicateVideoPosterImages,
   isEphemeralVideoUrl,
   matchResolvedVideoMedia,
+  needsResolvedVideoSource,
 } from './x-video-media';
 
 describe('x-video-media helpers', () => {
@@ -74,14 +75,14 @@ describe('x-video-media helpers', () => {
     expect(
       extractResolvedVideoMediaFromNetworkRequests([
         'https://video.twimg.com/amplify_video/2034272340201349120/pl/0waZ9FhU3ecgiIiU.m3u8?variant_version=1&tag=21&v=8d2',
-        'https://video.twimg.com/amplify_video/2034272340201349120/vid/avc1/0/0/540x960/demo-low.mp4',
-        'https://video.twimg.com/amplify_video/2034272340201349120/vid/avc1/0/0/1080x1920/demo-high.mp4',
+        'https://video.twimg.com/amplify_video/2034272340201349120/vid/avc1/0/0/540x960/demo-low.mp4?tag=21',
+        'https://video.twimg.com/amplify_video/2034272340201349120/vid/avc1/0/0/1080x1920/demo-high.mp4?tag=21',
         'https://video.twimg.com/amplify_video/2034272340201349120/vid/avc1/0/3000/1080x1920/segment.m4s',
       ]),
     ).toEqual([
       {
         sourceUrl:
-          'https://video.twimg.com/amplify_video/2034272340201349120/vid/avc1/0/0/1080x1920/demo-high.mp4',
+          'https://video.twimg.com/amplify_video/2034272340201349120/vid/avc1/0/0/1080x1920/demo-high.mp4?tag=21',
       },
     ]);
   });
@@ -124,11 +125,43 @@ describe('x-video-media helpers', () => {
     ]);
   });
 
+  it('replaces playlist video URLs with direct mp4 variants', () => {
+    const repaired = matchResolvedVideoMedia(
+      [
+        {
+          mediaType: MediaType.VIDEO,
+          previewUrl:
+            'https://pbs.twimg.com/amplify_video_thumb/2034272340201349120/img/moMDfRVeG4yl0_ue.jpg',
+          sourceUrl:
+            'https://video.twimg.com/amplify_video/2034272340201349120/pl/0waZ9FhU3ecgiIiU.m3u8?variant_version=1&tag=21&v=8d2',
+        },
+      ],
+      [
+        {
+          previewUrl:
+            'https://pbs.twimg.com/amplify_video_thumb/2034272340201349120/img/moMDfRVeG4yl0_ue.jpg',
+          sourceUrl:
+            'https://video.twimg.com/amplify_video/2034272340201349120/vid/avc1/0/0/1080x1920/demo-high.mp4?tag=21',
+        },
+      ],
+    );
+
+    expect(repaired).toEqual([
+      {
+        mediaType: MediaType.VIDEO,
+        previewUrl:
+          'https://pbs.twimg.com/amplify_video_thumb/2034272340201349120/img/moMDfRVeG4yl0_ue.jpg',
+        sourceUrl:
+          'https://video.twimg.com/amplify_video/2034272340201349120/vid/avc1/0/0/1080x1920/demo-high.mp4?tag=21',
+      },
+    ]);
+  });
+
   it('identifies blob video URLs and shared media identities', () => {
     expect(isEphemeralVideoUrl('blob:https://x.com/demo-video')).toBe(true);
-    expect(isEphemeralVideoUrl('https://video.twimg.com/tweet_video/demo.mp4')).toBe(
-      false,
-    );
+    expect(
+      isEphemeralVideoUrl('https://video.twimg.com/tweet_video/demo.mp4'),
+    ).toBe(false);
     expect(
       extractVideoMediaIdentity(
         'https://pbs.twimg.com/tweet_video_thumb/HDta966aUAE0Vr8.jpg',
@@ -139,5 +172,15 @@ describe('x-video-media helpers', () => {
         'https://video.twimg.com/tweet_video/HDta966aUAE0Vr8.mp4',
       ),
     ).toBe('tweet_video:HDta966aUAE0Vr8');
+    expect(
+      needsResolvedVideoSource(
+        'https://video.twimg.com/amplify_video/2034272340201349120/pl/demo.m3u8?tag=21',
+      ),
+    ).toBe(true);
+    expect(
+      needsResolvedVideoSource(
+        'https://video.twimg.com/tweet_video/HDta966aUAE0Vr8.mp4?tag=21',
+      ),
+    ).toBe(false);
   });
 });
