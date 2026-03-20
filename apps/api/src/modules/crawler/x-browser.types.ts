@@ -1,6 +1,7 @@
 import type { ChildProcess } from 'child_process';
 import type { Browser, BrowserContext, Page } from 'playwright';
 import type { BindingProfile, RawFeedResponse } from './crawler.types';
+import type { ResolvedVideoMediaSource } from './x-video-media';
 
 export type XCookiePayload = {
   domain: string;
@@ -66,6 +67,11 @@ export type XBrowserAutomationPort = {
   fetchRecommendedFeed(
     payload: RealBrowserCredentialPayload,
   ): Promise<RawFeedResponse>;
+  resolvePostVideoMedia(
+    payload: RealBrowserCredentialPayload,
+    postUrl: string,
+    xPostId: string,
+  ): Promise<ResolvedVideoMediaSource[]>;
   inspectInteractiveLogin(
     runtime: InteractiveLoginRuntime,
     loginUrl: string,

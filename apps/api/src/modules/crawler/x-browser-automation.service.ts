@@ -12,6 +12,7 @@ import {
   type BrowserContext,
   type Cookie,
   type Page,
+  type Response,
 } from 'playwright';
 import type { MediaType, PostType } from '@prisma/client';
 import type {
@@ -31,6 +32,14 @@ import type {
   XCookiePayload,
   XBrowserAutomationPort,
 } from './x-browser.types';
+import {
+  extractResolvedVideoMediaFromGraphqlPayload,
+  extractResolvedVideoMediaFromNetworkRequests,
+  filterDuplicateVideoPosterImages,
+  isEphemeralVideoUrl,
+  matchResolvedVideoMedia,
+  type ResolvedVideoMediaSource,
+} from './x-video-media';
 
 const HOME_URL = 'https://x.com/home';
 const LOGIN_URL = 'https://x.com/i/flow/login';
@@ -266,6 +275,8 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
 
       const posts = Array.from(postsById.values()).slice(0, maxPosts);
 
+      await this.hydrateResolvedVideoMediaSources(session.context, posts);
+
       if (posts.length === 0) {
         const diagnostics = await this.capturePageDiagnostics(session.page);
 
@@ -284,6 +295,25 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
         },
         posts,
       } satisfies RawFeedResponse;
+    } finally {
+      await session.context.close().catch(() => undefined);
+      await session.browser.close().catch(() => undefined);
+    }
+  }
+
+  async resolvePostVideoMedia(
+    payload: RealBrowserCredentialPayload,
+    postUrl: string,
+    xPostId: string,
+  ) {
+    const session = await this.createAuthenticatedSession(payload);
+
+    try {
+      return await this.resolvePostVideoMediaInContext(
+        session.context,
+        postUrl,
+        xPostId,
+      );
     } finally {
       await session.context.close().catch(() => undefined);
       await session.browser.close().catch(() => undefined);
@@ -1149,6 +1179,14 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
               previewUrl: item.poster || undefined,
             }),
           );
+          const videoPosterUrls = new Set(
+            videoMedia
+              .map((item) => item.previewUrl)
+              .filter((item): item is string => Boolean(item)),
+          );
+          const deduplicatedImageMedia = imageMedia.filter(
+            (item) => !videoPosterUrls.has(item.sourceUrl),
+          );
           const entities = inferEntities(rawText);
           const postType = detectPostType(article, rawText, permalink);
 
@@ -1167,7 +1205,7 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
               article.querySelector('[lang]')?.getAttribute('lang') ??
               undefined,
             entities,
-            media: [...imageMedia, ...videoMedia],
+            media: [...deduplicatedImageMedia, ...videoMedia],
             relations: inferRelations(
               article,
               postType,
@@ -1203,8 +1241,111 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
         ...item,
         postType: item.postType,
         entities: item.entities as PostEntities,
-        media: item.media,
+        media: filterDuplicateVideoPosterImages(item.media ?? []),
       }));
+  }
+
+  private async hydrateResolvedVideoMediaSources(
+    context: BrowserContext,
+    posts: RawFeedResponse['posts'],
+  ) {
+    for (const post of posts) {
+      if (
+        !post.media?.some(
+          (item) =>
+            item.mediaType === 'VIDEO' && isEphemeralVideoUrl(item.sourceUrl),
+        )
+      ) {
+        post.media = filterDuplicateVideoPosterImages(post.media ?? []);
+        continue;
+      }
+
+      const resolvedMedia = await this.resolvePostVideoMediaInContext(
+        context,
+        post.postUrl,
+        post.xPostId,
+      ).catch(() => [] as ResolvedVideoMediaSource[]);
+
+      post.media = filterDuplicateVideoPosterImages(
+        matchResolvedVideoMedia(post.media ?? [], resolvedMedia),
+      );
+    }
+  }
+
+  private async resolvePostVideoMediaInContext(
+    context: BrowserContext,
+    postUrl: string,
+    xPostId: string,
+  ) {
+    const page = await context.newPage();
+    const graphqlPayloads: unknown[] = [];
+    const networkRequestUrls = new Set<string>();
+    const responseListener = async (response: Response) => {
+      const responseUrl = response.url();
+
+      if (responseUrl.startsWith('https://video.twimg.com/')) {
+        networkRequestUrls.add(responseUrl);
+      }
+
+      if (
+        !responseUrl.includes('TweetResultByRestId') &&
+        !responseUrl.includes('TweetDetail')
+      ) {
+        return;
+      }
+
+      try {
+        graphqlPayloads.push(await response.json());
+      } catch {
+        // Ignore non-JSON responses and keep the network fallback.
+      }
+    };
+
+    page.on('response', responseListener);
+
+    try {
+      await page.goto(postUrl, {
+        waitUntil: 'domcontentloaded',
+      });
+      await page
+        .waitForResponse(
+          (response) =>
+            response.ok() &&
+            (response.url().includes('TweetResultByRestId') ||
+              response.url().includes('TweetDetail')),
+          {
+            timeout: 8000,
+          },
+        )
+        .catch(() => undefined);
+      await page.waitForTimeout(1200);
+
+      const videoLocator = page.locator('video').first();
+      const videoCount = await videoLocator.count().catch(() => 0);
+
+      if (videoCount > 0) {
+        await videoLocator.scrollIntoViewIfNeeded().catch(() => undefined);
+        await videoLocator.click({ force: true, timeout: 1500 }).catch(
+          () => undefined,
+        );
+        await page.waitForTimeout(1800);
+      }
+
+      const resolvedFromGraphql = graphqlPayloads.flatMap((payload) =>
+        extractResolvedVideoMediaFromGraphqlPayload(payload, xPostId),
+      );
+
+      if (resolvedFromGraphql.length > 0) {
+        return resolvedFromGraphql;
+      }
+
+      return extractResolvedVideoMediaFromNetworkRequests([
+        ...networkRequestUrls,
+      ]);
+    } finally {
+      page.off('response', responseListener);
+      await page.close().catch(() => undefined);
+    }
   }
 
   private serializeCookies(cookies: Cookie[]): XCookiePayload[] {

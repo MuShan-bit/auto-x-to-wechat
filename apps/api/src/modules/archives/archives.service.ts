@@ -10,7 +10,17 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { CredentialCryptoService } from '../crypto/credential-crypto.service';
+import type { RealBrowserCredentialPayload } from '../crawler/x-browser.types';
+import { XBrowserAutomationService } from '../crawler/x-browser-automation.service';
+import {
+  isEphemeralVideoUrl,
+  matchResolvedVideoMedia,
+  type ResolvedVideoMediaSource,
+} from '../crawler/x-video-media';
 import { PrismaService } from '../prisma/prisma.service';
+import { type RichTextDocument, type RichTextMediaBlock } from './rich-text.converter';
+import { renderRichTextToHtml } from './rich-text.renderer';
 
 type CreateArchivedPostMediaInput = {
   durationMs?: number;
@@ -90,7 +100,11 @@ export type CreateArchivedPostResult = {
 
 @Injectable()
 export class ArchivesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly credentialCryptoService: CredentialCryptoService,
+    private readonly xBrowserAutomationService: XBrowserAutomationService,
+  ) {}
 
   createArchivedPost(
     input: CreateArchivedPostInput,
@@ -234,7 +248,7 @@ export class ArchivesService {
       throw new NotFoundException('Archived post not found');
     }
 
-    return archivedPost;
+    return this.repairEphemeralVideoMediaSources(archivedPost);
   }
 
   async listArchivedPostsByBinding(
@@ -322,6 +336,188 @@ export class ArchivesService {
       page,
       pageSize,
       total,
+    };
+  }
+
+  private async repairEphemeralVideoMediaSources(
+    archivedPost: ArchivedPostDetail,
+  ) {
+    const videoItems = archivedPost.mediaItems.filter(
+      (item) =>
+        item.mediaType === 'VIDEO' && isEphemeralVideoUrl(item.sourceUrl),
+    );
+
+    if (videoItems.length === 0) {
+      return archivedPost;
+    }
+
+    const credentialPayload = this.parseRealBrowserCredentialPayload(
+      archivedPost.binding.authPayloadEncrypted,
+    );
+
+    if (!credentialPayload) {
+      return archivedPost;
+    }
+
+    const resolvedMedia = await this.xBrowserAutomationService
+      .resolvePostVideoMedia(
+        credentialPayload,
+        archivedPost.postUrl,
+        archivedPost.xPostId,
+      )
+      .catch(() => [] as ResolvedVideoMediaSource[]);
+
+    if (resolvedMedia.length === 0) {
+      return archivedPost;
+    }
+
+    const repairedMediaItems = matchResolvedVideoMedia(
+      archivedPost.mediaItems,
+      resolvedMedia,
+    );
+    const changedMediaItems = repairedMediaItems.filter((item, index) => {
+      const original = archivedPost.mediaItems[index];
+
+      return (
+        original &&
+        (original.sourceUrl !== item.sourceUrl ||
+          original.previewUrl !== item.previewUrl)
+      );
+    });
+
+    if (changedMediaItems.length === 0) {
+      return archivedPost;
+    }
+
+    const repairedRichTextJson = this.repairRichTextDocumentMediaSources(
+      archivedPost.richTextJson,
+      resolvedMedia,
+    );
+    const renderedHtml =
+      repairedRichTextJson !== null
+        ? renderRichTextToHtml(repairedRichTextJson)
+        : archivedPost.renderedHtml;
+
+    const archivedPostUpdateData: Prisma.ArchivedPostUpdateInput = {
+      renderedHtml,
+    };
+
+    if (repairedRichTextJson !== null) {
+      archivedPostUpdateData.richTextJson =
+        repairedRichTextJson as Prisma.InputJsonValue;
+    }
+
+    await this.prisma.$transaction([
+      ...changedMediaItems.map((item) =>
+        this.prisma.archivedPostMedia.update({
+          where: {
+            id: item.id,
+          },
+          data: {
+            sourceUrl: item.sourceUrl,
+            previewUrl: item.previewUrl,
+            width: item.width,
+            height: item.height,
+          },
+        }),
+      ),
+      this.prisma.archivedPost.update({
+        where: {
+          id: archivedPost.id,
+        },
+        data: archivedPostUpdateData,
+      }),
+    ]);
+
+    return {
+      ...archivedPost,
+      mediaItems: repairedMediaItems,
+      richTextJson:
+        repairedRichTextJson === null
+          ? archivedPost.richTextJson
+          : repairedRichTextJson,
+      renderedHtml,
+    };
+  }
+
+  private parseRealBrowserCredentialPayload(authPayloadEncrypted: string) {
+    try {
+      const decryptedPayload =
+        this.credentialCryptoService.decrypt(authPayloadEncrypted);
+
+      if (!decryptedPayload.trim()) {
+        return null;
+      }
+
+      const parsed = JSON.parse(
+        decryptedPayload,
+      ) as Partial<RealBrowserCredentialPayload>;
+
+      if (
+        typeof parsed !== 'object' ||
+        parsed === null ||
+        parsed.adapter !== 'real' ||
+        !Array.isArray(parsed.cookies)
+      ) {
+        return null;
+      }
+
+      return parsed as RealBrowserCredentialPayload;
+    } catch {
+      return null;
+    }
+  }
+
+  private repairRichTextDocumentMediaSources(
+    richTextJson: Prisma.JsonValue,
+    resolvedMedia: ResolvedVideoMediaSource[],
+  ): RichTextDocument | null {
+    if (
+      typeof richTextJson !== 'object' ||
+      richTextJson === null ||
+      !('version' in richTextJson) ||
+      !('blocks' in richTextJson) ||
+      !Array.isArray((richTextJson as RichTextDocument).blocks)
+    ) {
+      return null;
+    }
+
+    const document = richTextJson as RichTextDocument;
+    const mediaBlocks = document.blocks.filter(
+      (block): block is RichTextMediaBlock => block.type === 'media',
+    );
+    const repairedMediaBlocks = matchResolvedVideoMedia(
+      mediaBlocks,
+      resolvedMedia,
+    );
+    let mediaIndex = 0;
+    let changed = false;
+
+    const blocks = document.blocks.map((block) => {
+      if (block.type !== 'media') {
+        return block;
+      }
+
+      const repairedBlock = repairedMediaBlocks[mediaIndex] ?? block;
+
+      if (
+        repairedBlock.sourceUrl !== block.sourceUrl ||
+        repairedBlock.previewUrl !== block.previewUrl
+      ) {
+        changed = true;
+      }
+
+      mediaIndex += 1;
+      return repairedBlock;
+    });
+
+    if (!changed) {
+      return document;
+    }
+
+    return {
+      ...document,
+      blocks,
     };
   }
 
