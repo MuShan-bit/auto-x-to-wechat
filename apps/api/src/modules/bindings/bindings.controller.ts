@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -84,6 +85,17 @@ export class BindingsController {
   ) {
     return this.bindingsService
       .updateCrawlProfile(user.id, bindingId, profileId, dto)
+      .then((payload) => serializeForJson(payload));
+  }
+
+  @Delete(':id/crawl-profiles/:profileId')
+  deleteCrawlProfile(
+    @CurrentUser() user: RequestUser,
+    @Param('id') bindingId: string,
+    @Param('profileId') profileId: string,
+  ) {
+    return this.bindingsService
+      .deleteCrawlProfile(user.id, bindingId, profileId)
       .then((payload) => serializeForJson(payload));
   }
 

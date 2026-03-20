@@ -1,4 +1,4 @@
-import { CrawlScheduleKind } from '@prisma/client';
+import { CrawlMode, CrawlScheduleKind } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
@@ -12,6 +12,9 @@ import {
 } from 'class-validator';
 
 export class UpdateCrawlProfileDto {
+  @IsEnum(CrawlMode)
+  mode!: CrawlMode;
+
   @IsBoolean()
   enabled!: boolean;
 

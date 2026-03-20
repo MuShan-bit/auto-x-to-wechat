@@ -29,6 +29,10 @@ type UnbindBindingResponse = {
   deletedRunCount: number;
 };
 
+type DeleteCrawlProfileResponse = {
+  deletedProfileId: string;
+};
+
 const credentialSourceSchema = z.enum([
   "WEB_LOGIN",
   "COOKIE_IMPORT",
@@ -598,6 +602,7 @@ export async function updateCrawlProfileAction(
       path: `/bindings/${parsedOperation.data.bindingId}/crawl-profiles/${parsedOperation.data.profileId}`,
       method: "PATCH",
       body: JSON.stringify({
+        mode: parsed.data.mode,
         enabled: parsed.data.enabled,
         scheduleKind: parsed.data.scheduleKind,
         scheduleCron: parsed.data.scheduleCron,
@@ -612,6 +617,45 @@ export async function updateCrawlProfileAction(
 
     return {
       success: messages.actions.bindings.profileUpdated,
+    } satisfies BindingActionState;
+  } catch (error) {
+    return {
+      error: getApiErrorMessage(error, messages.actions.api.requestFailed),
+    } satisfies BindingActionState;
+  }
+}
+
+export async function deleteCrawlProfileAction(
+  _previousState: BindingActionState,
+  formData: FormData,
+): Promise<BindingActionState> {
+  const { messages } = await getRequestMessages();
+  const profileOperationSchema = createCrawlProfileOperationSchema(messages);
+  const parsed = profileOperationSchema.safeParse({
+    bindingId: getOptionalTextValue(formData, "bindingId"),
+    profileId: getOptionalTextValue(formData, "profileId"),
+  });
+
+  if (!parsed.success) {
+    return {
+      error:
+        parsed.error.issues[0]?.message ??
+        messages.actions.bindings.missingProfileId,
+    } satisfies BindingActionState;
+  }
+
+  try {
+    await apiRequest<DeleteCrawlProfileResponse>({
+      path: `/bindings/${parsed.data.bindingId}/crawl-profiles/${parsed.data.profileId}`,
+      method: "DELETE",
+    });
+
+    revalidatePath("/bindings");
+    revalidatePath("/strategies");
+    revalidatePath("/dashboard");
+
+    return {
+      success: messages.actions.bindings.profileDeleted,
     } satisfies BindingActionState;
   } catch (error) {
     return {

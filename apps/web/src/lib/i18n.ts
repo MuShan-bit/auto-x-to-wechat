@@ -281,6 +281,9 @@ type Messages = {
     createStrategy: string;
     createStrategyForAccount: string;
     editStrategy: string;
+    deleteStrategy: string;
+    deletingStrategy: string;
+    deleteStrategyConfirm: string;
     saveStrategy: string;
     savingStrategy: string;
     createStrategyDescription: string;
@@ -519,6 +522,7 @@ type Messages = {
       bindingSaved: string;
       profileCreated: string;
       profileUpdated: string;
+      profileDeleted: string;
       configValidationFailed: string;
       configSaved: string;
       bindingRevalidated: string;
@@ -886,6 +890,10 @@ const messages: Record<Locale, Messages> = {
       createStrategy: "新建策略",
       createStrategyForAccount: "为 @{username} 新建策略",
       editStrategy: "编辑策略",
+      deleteStrategy: "删除策略",
+      deletingStrategy: "删除中...",
+      deleteStrategyConfirm:
+        "删除后将移除该策略的调度配置。已关联的历史执行与归档记录会保留，但不能恢复。确定继续吗？",
       saveStrategy: "保存策略",
       savingStrategy: "保存中...",
       createStrategyDescription:
@@ -1171,6 +1179,7 @@ const messages: Record<Locale, Messages> = {
         bindingSaved: "绑定信息已保存。",
         profileCreated: "抓取策略已创建。",
         profileUpdated: "抓取策略已更新。",
+        profileDeleted: "抓取策略已删除。",
         configValidationFailed: "抓取配置校验失败。",
         configSaved: "抓取配置已更新。",
         bindingRevalidated: "绑定状态已重新校验。",
@@ -1533,6 +1542,10 @@ const messages: Record<Locale, Messages> = {
       createStrategy: "New strategy",
       createStrategyForAccount: "Create strategy for @{username}",
       editStrategy: "Edit strategy",
+      deleteStrategy: "Delete strategy",
+      deletingStrategy: "Deleting...",
+      deleteStrategyConfirm:
+        "Deleting removes this strategy configuration. Historical runs and archives stay intact, but the strategy itself cannot be restored. Continue?",
       saveStrategy: "Save strategy",
       savingStrategy: "Saving...",
       createStrategyDescription:
@@ -1823,6 +1836,7 @@ const messages: Record<Locale, Messages> = {
         bindingSaved: "Binding information has been saved.",
         profileCreated: "Crawl profile has been created.",
         profileUpdated: "Crawl profile has been updated.",
+        profileDeleted: "Crawl profile has been deleted.",
         configValidationFailed: "Crawl config validation failed.",
         configSaved: "Crawl config has been updated.",
         bindingRevalidated: "Binding status has been revalidated.",

@@ -183,7 +183,9 @@ export class BindingsService {
     dto: UpdateCrawlConfigDto,
   ) {
     const binding = await this.assertOwnership(userId, bindingId);
-    const scheduleConfig = buildIntervalScheduleConfig(dto.crawlIntervalMinutes);
+    const scheduleConfig = buildIntervalScheduleConfig(
+      dto.crawlIntervalMinutes,
+    );
     const nextRunAt = dto.crawlEnabled
       ? getNextRunAtForSchedule(scheduleConfig)
       : null;
@@ -474,9 +476,7 @@ export class BindingsService {
         region: dto.region?.trim() || null,
         language: dto.language?.trim() || null,
         maxPosts: dto.maxPosts,
-        nextRunAt: dto.enabled
-          ? getNextRunAtForSchedule(scheduleConfig)
-          : null,
+        nextRunAt: dto.enabled ? getNextRunAtForSchedule(scheduleConfig) : null,
       },
     });
   }
@@ -488,8 +488,12 @@ export class BindingsService {
     dto: UpdateCrawlProfileDto,
   ) {
     await this.assertOwnership(userId, bindingId);
-    const profile = await this.assertCrawlProfileOwnership(bindingId, profileId);
-    this.assertSearchProfileQueryText(profile.mode, dto.queryText);
+    const profile = await this.assertCrawlProfileOwnership(
+      bindingId,
+      profileId,
+    );
+    this.assertProfileModeMutationAllowed(profile.mode, dto.mode);
+    this.assertSearchProfileQueryText(dto.mode, dto.queryText);
     const scheduleConfig = this.resolveScheduleConfig(dto);
 
     return this.prisma.crawlProfile.update({
@@ -497,6 +501,7 @@ export class BindingsService {
         id: profileId,
       },
       data: {
+        mode: dto.mode,
         enabled: dto.enabled,
         scheduleKind: scheduleConfig.scheduleKind,
         scheduleCron: scheduleConfig.scheduleCron,
@@ -505,11 +510,52 @@ export class BindingsService {
         region: dto.region?.trim() || null,
         language: dto.language?.trim() || null,
         maxPosts: dto.maxPosts,
-        nextRunAt: dto.enabled
-          ? getNextRunAtForSchedule(scheduleConfig)
-          : null,
+        nextRunAt: dto.enabled ? getNextRunAtForSchedule(scheduleConfig) : null,
       },
     });
+  }
+
+  async deleteCrawlProfile(
+    userId: string,
+    bindingId: string,
+    profileId: string,
+  ) {
+    await this.assertOwnership(userId, bindingId);
+    const profile = await this.assertCrawlProfileOwnership(
+      bindingId,
+      profileId,
+    );
+
+    if (profile.mode === CrawlMode.RECOMMENDED) {
+      throw new ConflictException(
+        'Default recommended crawl profile cannot be deleted',
+      );
+    }
+
+    const activeRunCount = await this.prisma.crawlRun.count({
+      where: {
+        crawlProfileId: profileId,
+        status: {
+          in: [CrawlRunStatus.QUEUED, CrawlRunStatus.RUNNING],
+        },
+      },
+    });
+
+    if (activeRunCount > 0) {
+      throw new ConflictException(
+        'Current crawl profile has queued or running crawl runs and cannot be deleted yet',
+      );
+    }
+
+    await this.prisma.crawlProfile.delete({
+      where: {
+        id: profileId,
+      },
+    });
+
+    return {
+      deletedProfileId: profileId,
+    };
   }
 
   private findQueuedCrawlRun(bindingId: string) {
@@ -673,7 +719,10 @@ export class BindingsService {
     return binding;
   }
 
-  private async assertCrawlProfileOwnership(bindingId: string, profileId: string) {
+  private async assertCrawlProfileOwnership(
+    bindingId: string,
+    profileId: string,
+  ) {
     const profile = await this.prisma.crawlProfile.findFirst({
       where: {
         id: profileId,
@@ -832,8 +881,9 @@ export class BindingsService {
       ? {
           scheduleKind: CrawlScheduleKind.CRON,
           scheduleCron: profile.scheduleCron,
-          intervalMinutes:
-            estimateIntervalMinutesFromCron(profile.scheduleCron),
+          intervalMinutes: estimateIntervalMinutesFromCron(
+            profile.scheduleCron,
+          ),
         }
       : buildIntervalScheduleConfig(profile.intervalMinutes);
   }
@@ -848,6 +898,22 @@ export class BindingsService {
         profile.region === null &&
         profile.language === null,
     );
+  }
+
+  private assertProfileModeMutationAllowed(
+    currentMode: CrawlMode,
+    nextMode: CrawlMode,
+  ) {
+    if (
+      currentMode === CrawlMode.RECOMMENDED ||
+      nextMode === CrawlMode.RECOMMENDED
+    ) {
+      if (currentMode !== nextMode) {
+        throw new ConflictException(
+          'Default recommended crawl profile mode cannot be changed',
+        );
+      }
+    }
   }
 
   private assertSearchProfileQueryText(

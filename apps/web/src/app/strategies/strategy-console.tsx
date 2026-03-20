@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState, useEffect, useMemo, useState } from "react";
 import {
   createCrawlProfileAction,
+  deleteCrawlProfileAction,
   triggerCrawlProfileAction,
   updateCrawlProfileAction,
   type BindingActionState,
@@ -186,8 +187,9 @@ function StrategyDialogForm({
     return null;
   }
 
+  const isRecommendedProfile = editingProfile?.mode === "RECOMMENDED";
   const effectiveMode =
-    dialogState.type === "edit" ? editingProfile!.mode : mode;
+    dialogState.type === "edit" && isRecommendedProfile ? "RECOMMENDED" : mode;
   const action = dialogState.type === "create" ? createAction : updateAction;
   const dialogTitle =
     dialogState.type === "create"
@@ -210,7 +212,7 @@ function StrategyDialogForm({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl rounded-[2rem] border-border/70 bg-white p-0 dark:border-white/10 dark:bg-[#111713]">
+      <DialogContent className="w-[min(96vw,72rem)] max-w-[72rem] rounded-[2rem] border-border/70 bg-white p-0 dark:border-white/10 dark:bg-[#111713]">
         <div className="space-y-6 p-6">
           <DialogHeader>
             <DialogTitle className="text-xl text-foreground">
@@ -246,7 +248,8 @@ function StrategyDialogForm({
                 <FieldLabel htmlFor="strategy-mode">
                   {messages.strategies.form.modeLabel}
                 </FieldLabel>
-                {dialogState.type === "create" ? (
+                {dialogState.type === "create" ||
+                (dialogState.type === "edit" && !isRecommendedProfile) ? (
                   <select
                     id="strategy-mode"
                     value={mode}
@@ -377,6 +380,10 @@ export function StrategyConsole({ bindings, locale }: StrategyConsoleProps) {
     triggerCrawlProfileAction,
     initialActionState,
   );
+  const [deleteState, deleteAction, isDeletePending] = useActionState(
+    deleteCrawlProfileAction,
+    initialActionState,
+  );
   const currentBinding =
     bindings.find((binding) => binding.id === selectedBindingId) ??
     bindings[0] ??
@@ -412,6 +419,17 @@ export function StrategyConsole({ bindings, locale }: StrategyConsoleProps) {
       totalCount: currentBinding.crawlProfiles.length,
     };
   }, [currentBinding]);
+
+  const feedbackState =
+    deleteState.error || deleteState.success ? deleteState : triggerState;
+
+  function handleDeleteProfileSubmit(event: React.FormEvent<HTMLFormElement>) {
+    const confirmed = window.confirm(messages.strategies.deleteStrategyConfirm);
+
+    if (!confirmed) {
+      event.preventDefault();
+    }
+  }
 
   return (
     <>
@@ -541,13 +559,13 @@ export function StrategyConsole({ bindings, locale }: StrategyConsoleProps) {
               <div className="flex flex-wrap gap-2">
                 <Link
                   href="/bindings"
-                  className="inline-flex h-10 items-center justify-center rounded-full border border-border/70 bg-white px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted dark:border-white/10 dark:bg-white/10 dark:hover:bg-white/14"
+                  className="inline-flex h-10 items-center justify-center rounded-full border border-border/70 bg-white px-5 text-sm font-medium text-foreground transition-colors hover:bg-muted dark:border-white/10 dark:bg-white/10 dark:hover:bg-white/14"
                 >
                   {messages.strategies.viewBindingWorkspace}
                 </Link>
                 <Button
                   type="button"
-                  className="rounded-full bg-[#2d4d3f] px-5 hover:bg-[#20372d] dark:bg-[#d8e2db] dark:text-[#18201b] dark:hover:bg-[#c8d3cb]"
+                  className="h-10 rounded-full bg-[#2d4d3f] px-5 hover:bg-[#20372d] dark:bg-[#d8e2db] dark:text-[#18201b] dark:hover:bg-[#c8d3cb]"
                   disabled={!currentBinding}
                   onClick={() => setDialogState({ type: "create" })}
                 >
@@ -605,7 +623,7 @@ export function StrategyConsole({ bindings, locale }: StrategyConsoleProps) {
           </CardHeader>
 
           <CardContent className="space-y-5">
-            <ActionFeedback state={triggerState} />
+            <ActionFeedback state={feedbackState} />
 
             {!currentBinding ? (
               <EmptyState
@@ -618,6 +636,9 @@ export function StrategyConsole({ bindings, locale }: StrategyConsoleProps) {
                   <StrategyCard
                     key={profile.id}
                     binding={currentBinding}
+                    deleteAction={deleteAction}
+                    handleDeleteProfileSubmit={handleDeleteProfileSubmit}
+                    isDeletePending={isDeletePending}
                     locale={locale}
                     profile={profile}
                     triggerAction={triggerAction}
@@ -643,6 +664,9 @@ export function StrategyConsole({ bindings, locale }: StrategyConsoleProps) {
 
 function StrategyCard({
   binding,
+  deleteAction,
+  handleDeleteProfileSubmit,
+  isDeletePending,
   locale,
   profile,
   triggerAction,
@@ -650,6 +674,9 @@ function StrategyCard({
   onEdit,
 }: {
   binding: BindingRecord;
+  deleteAction: (payload: FormData) => void;
+  handleDeleteProfileSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  isDeletePending: boolean;
   locale: Locale;
   profile: CrawlProfileRecord;
   triggerAction: (payload: FormData) => void;
@@ -747,6 +774,22 @@ function StrategyCard({
           >
             {messages.strategies.editStrategy}
           </Button>
+          {profile.mode !== "RECOMMENDED" ? (
+            <form action={deleteAction} onSubmit={handleDeleteProfileSubmit}>
+              <input type="hidden" name="bindingId" value={binding.id} />
+              <input type="hidden" name="profileId" value={profile.id} />
+              <Button
+                type="submit"
+                variant="destructive"
+                className="rounded-full px-4"
+                disabled={isDeletePending}
+              >
+                {isDeletePending
+                  ? messages.strategies.deletingStrategy
+                  : messages.strategies.deleteStrategy}
+              </Button>
+            </form>
+          ) : null}
           <form action={triggerAction}>
             <input type="hidden" name="bindingId" value={binding.id} />
             <input type="hidden" name="profileId" value={profile.id} />
