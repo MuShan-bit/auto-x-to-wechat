@@ -113,7 +113,7 @@ export class CrawlJobsService {
 
       const profileFilter = profileId
         ? Prisma.sql`cp.id = ${profileId}`
-        : Prisma.sql`cp.mode = 'RECOMMENDED'`;
+        : Prisma.sql`cp.is_system_default = TRUE`;
 
       const claimableJobs = await tx.$queryRaw<ClaimableCrawlJobRow[]>(
         Prisma.sql`
@@ -215,7 +215,7 @@ export class CrawlJobsService {
         },
         crawlProfiles: {
           none: {
-            mode: CrawlMode.RECOMMENDED,
+            isSystemDefault: true,
           },
         },
       },
@@ -233,6 +233,7 @@ export class CrawlJobsService {
         data: {
           bindingId: binding.id,
           mode: CrawlMode.RECOMMENDED,
+          isSystemDefault: true,
           enabled: binding.crawlEnabled && binding.crawlJob.enabled,
           intervalMinutes: binding.crawlJob.intervalMinutes,
           maxPosts: 20,

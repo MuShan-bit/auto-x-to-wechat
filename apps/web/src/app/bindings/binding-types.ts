@@ -2,6 +2,7 @@ export type CrawlProfileRecord = {
   enabled: boolean;
   id: string;
   intervalMinutes: number;
+  isSystemDefault: boolean;
   language: string | null;
   lastRunAt: string | null;
   maxPosts: number;

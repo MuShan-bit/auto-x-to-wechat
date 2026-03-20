@@ -262,6 +262,7 @@ describe('CrawlJobsService and CrawlRunsService', () => {
           create: [
             {
               mode: CrawlMode.RECOMMENDED,
+              isSystemDefault: true,
               enabled: input.crawlEnabled,
               intervalMinutes: 30,
               maxPosts: 20,

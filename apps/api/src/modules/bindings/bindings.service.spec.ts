@@ -88,6 +88,7 @@ describe('BindingsService', () => {
     expect(binding.crawlJob?.intervalMinutes).toBe(90);
     expect(binding.crawlProfiles).toEqual([
       expect.objectContaining({
+        isSystemDefault: true,
         mode: CrawlMode.RECOMMENDED,
         enabled: true,
         intervalMinutes: 90,
@@ -117,6 +118,7 @@ describe('BindingsService', () => {
     expect(binding.crawlJob?.intervalMinutes).toBe(60);
     expect(binding.crawlProfiles).toEqual([
       expect.objectContaining({
+        isSystemDefault: true,
         mode: CrawlMode.RECOMMENDED,
         enabled: true,
         intervalMinutes: 60,
@@ -262,6 +264,7 @@ describe('BindingsService', () => {
     expect(updated.crawlProfiles).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          isSystemDefault: true,
           mode: CrawlMode.RECOMMENDED,
           enabled: false,
           intervalMinutes: 180,
@@ -331,6 +334,7 @@ describe('BindingsService', () => {
     expect(profiles).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          isSystemDefault: true,
           mode: CrawlMode.RECOMMENDED,
         }),
         expect.objectContaining({
@@ -381,6 +385,42 @@ describe('BindingsService', () => {
         },
       }),
     ).resolves.toBeNull();
+  });
+
+  it('creates and deletes a custom recommended crawl profile', async () => {
+    const binding = await createBinding({
+      xUserId: 'x-recommended-profile',
+      username: 'recommended_profile_owner',
+      displayName: 'Recommended Profile Owner',
+      status: BindingStatus.ACTIVE,
+      crawlEnabled: true,
+      crawlIntervalMinutes: 30,
+    });
+
+    const createdProfile = await bindingsService.createCrawlProfile(
+      'binding_owner',
+      binding.id,
+      {
+        mode: CrawlMode.RECOMMENDED,
+        enabled: true,
+        scheduleKind: CrawlScheduleKind.INTERVAL,
+        intervalMinutes: 45,
+        maxPosts: 30,
+      },
+    );
+
+    expect(createdProfile.mode).toBe(CrawlMode.RECOMMENDED);
+    expect(createdProfile.isSystemDefault).toBe(false);
+
+    await expect(
+      bindingsService.deleteCrawlProfile(
+        'binding_owner',
+        binding.id,
+        createdProfile.id,
+      ),
+    ).resolves.toEqual({
+      deletedProfileId: createdProfile.id,
+    });
   });
 
   it('requires query text for search crawl profiles', async () => {
@@ -612,6 +652,7 @@ describe('BindingsService', () => {
           create: [
             {
               mode: CrawlMode.RECOMMENDED,
+              isSystemDefault: true,
               enabled: input.crawlEnabled,
               intervalMinutes: input.crawlIntervalMinutes,
               maxPosts: 20,

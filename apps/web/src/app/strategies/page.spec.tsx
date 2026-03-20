@@ -62,6 +62,7 @@ describe("StrategiesPage", () => {
             id: "profile-001",
             enabled: true,
             intervalMinutes: 60,
+            isSystemDefault: true,
             language: null,
             lastRunAt: null,
             maxPosts: 20,

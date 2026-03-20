@@ -281,6 +281,7 @@ type Messages = {
     createStrategy: string;
     createStrategyForAccount: string;
     editStrategy: string;
+    systemDefaultBadge: string;
     deleteStrategy: string;
     deletingStrategy: string;
     deleteStrategyConfirm: string;
@@ -882,7 +883,7 @@ const messages: Record<Locale, Messages> = {
         "策略与绑定账号一对多关联。切换账号后，右侧内容会同步更新。",
       emptyTitle: "还没有策略",
       emptyDescription:
-        "当前账号还没有可管理的抓取策略。你可以新建热点或搜索策略，推荐策略会在绑定时自动补齐。",
+        "当前账号还没有可管理的抓取策略。你可以新建推荐、热点或搜索策略，系统也会在绑定时自动补齐默认推荐策略。",
       noAccountTitle: "先绑定一个 X 账号",
       noAccountDescription:
         "策略中心需要依附绑定账号使用。先去绑定页完成账号接入，再回来配置策略与周期。",
@@ -890,6 +891,7 @@ const messages: Record<Locale, Messages> = {
       createStrategy: "新建策略",
       createStrategyForAccount: "为 @{username} 新建策略",
       editStrategy: "编辑策略",
+      systemDefaultBadge: "系统默认",
       deleteStrategy: "删除策略",
       deletingStrategy: "删除中...",
       deleteStrategyConfirm:
@@ -897,9 +899,9 @@ const messages: Record<Locale, Messages> = {
       saveStrategy: "保存策略",
       savingStrategy: "保存中...",
       createStrategyDescription:
-        "给当前账号追加一条新的热点或搜索策略，并为它设置独立抓取周期。",
+        "给当前账号追加新的推荐、热点或搜索策略，并为它设置独立抓取周期。",
       editStrategyDescription:
-        "调整当前策略的周期、抓取上限与启停状态。策略模式在创建后保持只读。",
+        "调整当前策略的周期、抓取上限与启停状态。系统默认推荐策略的模式会保持只读。",
       strategyCountLabel: "策略数量",
       strategyCount: "{count} 条策略",
       enabledStrategyLabel: "已启用策略",
@@ -918,15 +920,15 @@ const messages: Record<Locale, Messages> = {
       triggeringNow: "执行中...",
       emptyStrategiesTitle: "当前账号还没有额外策略",
       emptyStrategiesDescription:
-        "先创建一条热点或搜索策略，或编辑默认推荐策略来调整周期。",
+        "先创建一条推荐、热点或搜索策略，或编辑默认推荐策略来调整周期。",
       viewBindingWorkspace: "查看绑定工作区",
-      modeReadonlyHint: "策略模式会影响抓取入口，创建后保持只读。",
+      modeReadonlyHint: "系统默认推荐策略由绑定配置托管，因此模式保持只读。",
       form: {
         modeLabel: "策略模式",
         accountLabel: "关联账号",
         accountSummary: "@{username} · {displayName}",
-        createHint: "新建时建议先从热点或搜索策略开始。",
-        editHint: "默认推荐策略也可以在这里调整周期与抓取上限。",
+        createHint: "可以按需要创建推荐、热点或搜索策略。",
+        editHint: "系统默认推荐策略也可以在这里调整周期与抓取上限。",
       },
       scheduleBuilder: {
         customCronHint:
@@ -1534,7 +1536,7 @@ const messages: Record<Locale, Messages> = {
         "Strategies are linked one-to-many with bound accounts. Switch accounts to update the workspace context.",
       emptyTitle: "No strategies yet",
       emptyDescription:
-        "This account does not have manageable crawl strategies yet. Create a hot or search strategy, or rely on the default recommended strategy created during binding.",
+        "This account does not have manageable crawl strategies yet. Create recommended, hot, or search strategies, or rely on the default recommended strategy created during binding.",
       noAccountTitle: "Bind an X account first",
       noAccountDescription:
         "The strategy center depends on bound accounts. Finish the account setup on the bindings page, then return here to manage schedules.",
@@ -1542,6 +1544,7 @@ const messages: Record<Locale, Messages> = {
       createStrategy: "New strategy",
       createStrategyForAccount: "Create strategy for @{username}",
       editStrategy: "Edit strategy",
+      systemDefaultBadge: "System default",
       deleteStrategy: "Delete strategy",
       deletingStrategy: "Deleting...",
       deleteStrategyConfirm:
@@ -1549,9 +1552,9 @@ const messages: Record<Locale, Messages> = {
       saveStrategy: "Save strategy",
       savingStrategy: "Saving...",
       createStrategyDescription:
-        "Add a new hot or search strategy for the current account and give it an independent schedule.",
+        "Add a new recommended, hot, or search strategy for the current account and give it an independent schedule.",
       editStrategyDescription:
-        "Adjust the schedule, post limit, and enable state for the current strategy. The mode stays read-only after creation.",
+        "Adjust the schedule, post limit, and enable state for the current strategy. The system default recommended strategy keeps its mode read-only.",
       strategyCountLabel: "Strategy count",
       strategyCount: "{count} strategies",
       enabledStrategyLabel: "Enabled strategies",
@@ -1571,17 +1574,17 @@ const messages: Record<Locale, Messages> = {
       triggeringNow: "Running...",
       emptyStrategiesTitle: "No additional strategies yet",
       emptyStrategiesDescription:
-        "Create a hot or search strategy first, or edit the default recommended strategy to change its cadence.",
+        "Create a recommended, hot, or search strategy first, or edit the default recommended strategy to change its cadence.",
       viewBindingWorkspace: "Open binding workspace",
       modeReadonlyHint:
-        "The strategy mode controls the fetch entry point and stays read-only after creation.",
+        "The system default recommended strategy is managed by the binding configuration, so its mode stays read-only.",
       form: {
         modeLabel: "Strategy mode",
         accountLabel: "Bound account",
         accountSummary: "@{username} · {displayName}",
-        createHint:
-          "Starting with a hot or search strategy usually works best.",
-        editHint: "The default recommended strategy can also be tuned here.",
+        createHint: "Create recommended, hot, or search strategies as needed.",
+        editHint:
+          "The system default recommended strategy can also be tuned here.",
       },
       scheduleBuilder: {
         customCronHint:

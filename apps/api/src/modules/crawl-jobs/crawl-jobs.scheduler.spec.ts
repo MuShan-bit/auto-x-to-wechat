@@ -93,6 +93,7 @@ describe('CrawlJobsScheduler', () => {
         id: 'profile_1',
         bindingId: 'binding_1',
         mode: CrawlMode.RECOMMENDED,
+        isSystemDefault: true,
         enabled: true,
         intervalMinutes: 15,
         queryText: null,

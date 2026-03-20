@@ -69,6 +69,9 @@ const bindingDetailArgs = {
     crawlProfiles: {
       orderBy: [
         {
+          isSystemDefault: 'desc',
+        },
+        {
           mode: 'asc',
         },
         {
@@ -386,9 +389,7 @@ export class BindingsService {
 
     if (
       !binding.crawlProfiles.some((profile) =>
-        profileId
-          ? profile.id === profileId
-          : profile.mode === CrawlMode.RECOMMENDED,
+        profileId ? profile.id === profileId : profile.isSystemDefault,
       )
     ) {
       throw new ConflictException(
@@ -446,6 +447,9 @@ export class BindingsService {
       },
       orderBy: [
         {
+          isSystemDefault: 'desc',
+        },
+        {
           mode: 'asc',
         },
         {
@@ -468,6 +472,7 @@ export class BindingsService {
       data: {
         bindingId,
         mode: dto.mode,
+        isSystemDefault: false,
         enabled: dto.enabled,
         scheduleKind: scheduleConfig.scheduleKind,
         scheduleCron: scheduleConfig.scheduleCron,
@@ -492,7 +497,7 @@ export class BindingsService {
       bindingId,
       profileId,
     );
-    this.assertProfileModeMutationAllowed(profile.mode, dto.mode);
+    this.assertProfileModeMutationAllowed(profile, dto.mode);
     this.assertSearchProfileQueryText(dto.mode, dto.queryText);
     const scheduleConfig = this.resolveScheduleConfig(dto);
 
@@ -526,7 +531,7 @@ export class BindingsService {
       profileId,
     );
 
-    if (profile.mode === CrawlMode.RECOMMENDED) {
+    if (profile.isSystemDefault) {
       throw new ConflictException(
         'Default recommended crawl profile cannot be deleted',
       );
@@ -646,6 +651,7 @@ export class BindingsService {
             create: [
               {
                 mode: CrawlMode.RECOMMENDED,
+                isSystemDefault: true,
                 enabled: input.crawlEnabled,
                 scheduleKind: defaultSchedule.scheduleKind,
                 scheduleCron: defaultSchedule.scheduleCron,
@@ -801,10 +807,7 @@ export class BindingsService {
     const existingProfile = await this.prisma.crawlProfile.findFirst({
       where: {
         bindingId,
-        mode: CrawlMode.RECOMMENDED,
-        queryText: null,
-        region: null,
-        language: null,
+        isSystemDefault: true,
       },
       orderBy: {
         createdAt: 'asc',
@@ -816,6 +819,7 @@ export class BindingsService {
         data: {
           bindingId,
           mode: CrawlMode.RECOMMENDED,
+          isSystemDefault: true,
           enabled: input.enabled,
           scheduleKind: input.scheduleKind,
           scheduleCron: input.scheduleCron,
@@ -891,28 +895,20 @@ export class BindingsService {
   private findDefaultRecommendedProfile(
     profiles: BindingRecordWithJob['crawlProfiles'],
   ) {
-    return profiles.find(
-      (profile) =>
-        profile.mode === CrawlMode.RECOMMENDED &&
-        profile.queryText === null &&
-        profile.region === null &&
-        profile.language === null,
-    );
+    return profiles.find((profile) => profile.isSystemDefault);
   }
 
   private assertProfileModeMutationAllowed(
-    currentMode: CrawlMode,
+    profile: Pick<
+      BindingRecordWithJob['crawlProfiles'][number],
+      'isSystemDefault' | 'mode'
+    >,
     nextMode: CrawlMode,
   ) {
-    if (
-      currentMode === CrawlMode.RECOMMENDED ||
-      nextMode === CrawlMode.RECOMMENDED
-    ) {
-      if (currentMode !== nextMode) {
-        throw new ConflictException(
-          'Default recommended crawl profile mode cannot be changed',
-        );
-      }
+    if (profile.isSystemDefault && profile.mode !== nextMode) {
+      throw new ConflictException(
+        'Default recommended crawl profile mode cannot be changed',
+      );
     }
   }
 

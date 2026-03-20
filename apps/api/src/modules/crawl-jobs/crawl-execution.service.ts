@@ -103,9 +103,8 @@ export class CrawlExecutionService {
         credentialPayload,
         crawlProfile?.queryText ?? null,
       );
-      const normalizedPosts = await this.feedCrawlerAdapter.normalizePosts(
-        rawFeed,
-      );
+      const normalizedPosts =
+        await this.feedCrawlerAdapter.normalizePosts(rawFeed);
       const postsToArchive = crawlProfile?.maxPosts
         ? normalizedPosts.slice(0, crawlProfile.maxPosts)
         : normalizedPosts;
@@ -220,7 +219,7 @@ export class CrawlExecutionService {
             status: BindingStatus.ACTIVE,
             lastCrawledAt: now,
             lastErrorMessage: errorMessage,
-            nextCrawlAt: this.shouldSyncLegacySchedule(crawlMode)
+            nextCrawlAt: this.shouldSyncLegacySchedule(crawlProfile)
               ? nextRunAt
               : binding.nextCrawlAt,
           },
@@ -239,7 +238,7 @@ export class CrawlExecutionService {
         );
       }
 
-      if (queuedRun.crawlJob && this.shouldSyncLegacySchedule(crawlMode)) {
+      if (queuedRun.crawlJob && this.shouldSyncLegacySchedule(crawlProfile)) {
         successUpdates.push(
           this.prisma.crawlJob.update({
             where: { id: queuedRun.crawlJob.id },
@@ -296,7 +295,7 @@ export class CrawlExecutionService {
             status: isAuthError ? BindingStatus.INVALID : binding.status,
             lastErrorMessage: message,
             nextCrawlAt:
-              isAuthError || this.shouldSyncLegacySchedule(crawlMode)
+              isAuthError || this.shouldSyncLegacySchedule(crawlProfile)
                 ? nextRunAt
                 : binding.nextCrawlAt,
             crawlEnabled: isAuthError ? false : binding.crawlEnabled,
@@ -330,7 +329,7 @@ export class CrawlExecutionService {
 
       if (
         queuedRun.crawlJob &&
-        (isAuthError || this.shouldSyncLegacySchedule(crawlMode))
+        (isAuthError || this.shouldSyncLegacySchedule(crawlProfile))
       ) {
         failureUpdates.push(
           this.prisma.crawlJob.update({
@@ -406,8 +405,14 @@ export class CrawlExecutionService {
     return getNextRunAtForSchedule(scheduleConfig, now);
   }
 
-  private shouldSyncLegacySchedule(mode: CrawlMode) {
-    return mode === CrawlMode.RECOMMENDED;
+  private shouldSyncLegacySchedule(
+    crawlProfile: { isSystemDefault: boolean } | null | undefined,
+  ) {
+    if (!crawlProfile) {
+      return true;
+    }
+
+    return crawlProfile.isSystemDefault;
   }
 
   private toInputJsonValue(value: unknown) {

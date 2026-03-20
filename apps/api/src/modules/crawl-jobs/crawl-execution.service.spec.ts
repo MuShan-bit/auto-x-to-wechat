@@ -84,6 +84,7 @@ describe('CrawlExecutionService', () => {
           create: [
             {
               mode: CrawlMode.RECOMMENDED,
+              isSystemDefault: true,
               enabled: true,
               intervalMinutes: 30,
               maxPosts: 20,

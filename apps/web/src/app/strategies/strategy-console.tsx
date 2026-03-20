@@ -156,7 +156,7 @@ function StrategyDialogForm({
     updateCrawlProfileAction,
     initialActionState,
   );
-  const [mode, setMode] = useState<"HOT" | "SEARCH">("HOT");
+  const [mode, setMode] = useState<"RECOMMENDED" | "HOT" | "SEARCH">("HOT");
   const activeState = dialogState.type === "create" ? createState : updateState;
   const isPending =
     dialogState.type === "create" ? isCreatePending : isUpdatePending;
@@ -168,10 +168,8 @@ function StrategyDialogForm({
       return;
     }
 
-    if (editingProfile?.mode === "SEARCH") {
-      setMode("SEARCH");
-    } else {
-      setMode("HOT");
+    if (editingProfile) {
+      setMode(editingProfile.mode);
     }
   }, [dialogState.type, editingProfile?.mode]);
 
@@ -187,9 +185,11 @@ function StrategyDialogForm({
     return null;
   }
 
-  const isRecommendedProfile = editingProfile?.mode === "RECOMMENDED";
+  const isSystemDefaultProfile = editingProfile?.isSystemDefault ?? false;
   const effectiveMode =
-    dialogState.type === "edit" && isRecommendedProfile ? "RECOMMENDED" : mode;
+    dialogState.type === "edit" && isSystemDefaultProfile
+      ? "RECOMMENDED"
+      : mode;
   const action = dialogState.type === "create" ? createAction : updateAction;
   const dialogTitle =
     dialogState.type === "create"
@@ -212,7 +212,10 @@ function StrategyDialogForm({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="w-[min(96vw,72rem)] max-w-[72rem] rounded-[2rem] border-border/70 bg-white p-0 dark:border-white/10 dark:bg-[#111713]">
+      <DialogContent
+        className="max-w-none rounded-[2rem] border-border/70 bg-white p-0 dark:border-white/10 dark:bg-[#111713]"
+        style={{ maxWidth: "72rem", width: "min(96vw, 72rem)" }}
+      >
         <div className="space-y-6 p-6">
           <DialogHeader>
             <DialogTitle className="text-xl text-foreground">
@@ -249,15 +252,20 @@ function StrategyDialogForm({
                   {messages.strategies.form.modeLabel}
                 </FieldLabel>
                 {dialogState.type === "create" ||
-                (dialogState.type === "edit" && !isRecommendedProfile) ? (
+                (dialogState.type === "edit" && !isSystemDefaultProfile) ? (
                   <select
                     id="strategy-mode"
                     value={mode}
                     onChange={(event) =>
-                      setMode(event.target.value as "HOT" | "SEARCH")
+                      setMode(
+                        event.target.value as "RECOMMENDED" | "HOT" | "SEARCH",
+                      )
                     }
                     className="h-11 w-full rounded-2xl border border-border/70 bg-white px-4 text-sm text-foreground outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/40 dark:border-white/10 dark:bg-white/10"
                   >
+                    <option value="RECOMMENDED">
+                      {messages.enums.crawlMode.RECOMMENDED}
+                    </option>
                     <option value="HOT">{messages.enums.crawlMode.HOT}</option>
                     <option value="SEARCH">
                       {messages.enums.crawlMode.SEARCH}
@@ -701,6 +709,11 @@ function StrategyCard({
             <Badge className="rounded-full bg-[#eef4f0] text-[#2d4d3f] dark:bg-[#223228] dark:text-[#d8e2db]">
               {messages.enums.crawlMode[profile.mode]}
             </Badge>
+            {profile.isSystemDefault ? (
+              <Badge className="rounded-full bg-[#f5efe4] text-[#7f5a26] dark:bg-[#3d3124] dark:text-[#f2c58c]">
+                {messages.strategies.systemDefaultBadge}
+              </Badge>
+            ) : null}
             <Badge
               className={cn(
                 "rounded-full",
@@ -774,7 +787,7 @@ function StrategyCard({
           >
             {messages.strategies.editStrategy}
           </Button>
-          {profile.mode !== "RECOMMENDED" ? (
+          {!profile.isSystemDefault ? (
             <form action={deleteAction} onSubmit={handleDeleteProfileSubmit}>
               <input type="hidden" name="bindingId" value={binding.id} />
               <input type="hidden" name="profileId" value={profile.id} />

@@ -473,6 +473,7 @@ model CrawlProfile {
   id                 String              @id @default(cuid())
   bindingId          String              @map("binding_id")
   mode               CrawlMode
+  isSystemDefault    Boolean             @default(false) @map("is_system_default")
   enabled            Boolean             @default(true)
   scheduleKind       CrawlScheduleKind   @default(INTERVAL) @map("schedule_kind")
   scheduleCron       String?             @map("schedule_cron") @db.Text
@@ -490,6 +491,7 @@ model CrawlProfile {
   archiveOccurrences ArchiveOccurrence[]
 
   @@index([bindingId])
+  @@index([bindingId, isSystemDefault])
   @@index([enabled, nextRunAt])
   @@map("crawl_profiles")
 }
