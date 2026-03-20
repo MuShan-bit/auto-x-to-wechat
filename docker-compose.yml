@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:16-alpine
+    image: ${DOCKER_DB_IMAGE:-postgres:16-alpine}
     restart: unless-stopped
     environment:
       POSTGRES_DB: auto_x_to_wechat
@@ -21,6 +21,8 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      args:
+        NODE_IMAGE: ${DOCKER_NODE_BASE_IMAGE:-node:20-bookworm-slim}
     restart: unless-stopped
     depends_on:
       db:
@@ -37,7 +39,7 @@ services:
       ENABLE_X_BROWSER_REMOTE_DESKTOP: "1"
       X_BROWSER_REMOTE_DESKTOP_PORT: 6080
       X_BROWSER_VNC_PORT: 5900
-      X_BROWSER_EXECUTABLE_PATH: /usr/bin/google-chrome-stable
+      X_BROWSER_EXECUTABLE_PATH: /usr/bin/chromium
     ports:
       - "${DOCKER_API_PORT:-3001}:3001"
       - "${DOCKER_BROWSER_DESKTOP_PORT:-6080}:6080"
@@ -58,6 +60,8 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        NODE_IMAGE: ${DOCKER_NODE_BASE_IMAGE:-node:20-bookworm-slim}
     profiles: ["full"]
     restart: unless-stopped
     depends_on:

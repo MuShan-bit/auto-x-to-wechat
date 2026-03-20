@@ -1,28 +1,30 @@
-FROM mcr.microsoft.com/playwright:v1.58.2-noble
+ARG NODE_IMAGE=node:20-bookworm-slim
+FROM ${NODE_IMAGE}
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 ENV DISPLAY=":99"
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD="1"
+ENV COREPACK_NPM_REGISTRY="https://registry.npmmirror.com"
+ENV npm_config_registry="https://registry.npmmirror.com"
+ENV PRISMA_ENGINES_MIRROR="https://registry.npmmirror.com/-/binary/prisma"
 
 RUN corepack enable
-RUN apt-get update \
+RUN sed -i \
+    's|http://deb.debian.org/debian|http://mirrors.aliyun.com/debian|g; s|http://deb.debian.org/debian-security|http://mirrors.aliyun.com/debian-security|g' \
+    /etc/apt/sources.list.d/debian.sources \
+  && apt-get update \
   && apt-get install -y --no-install-recommends \
     ca-certificates \
-    curl \
+    chromium \
+    fonts-liberation \
+    fonts-noto-cjk \
+    fonts-noto-color-emoji \
     fluxbox \
-    gnupg \
     novnc \
     websockify \
     x11vnc \
     xvfb \
-  && install -d -m 0755 /etc/apt/keyrings \
-  && curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
-    | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg \
-  && chmod a+r /etc/apt/keyrings/google-chrome.gpg \
-  && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" \
-    > /etc/apt/sources.list.d/google-chrome.list \
-  && apt-get update \
-  && apt-get install -y --no-install-recommends google-chrome-stable \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
