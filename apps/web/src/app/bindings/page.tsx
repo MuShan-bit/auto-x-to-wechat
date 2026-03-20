@@ -5,10 +5,11 @@ import { getRequestMessages } from "@/lib/request-locale";
 
 export default async function BindingsPage() {
   const { locale, messages } = await getRequestMessages();
-  const currentBinding = await apiRequest<BindingRecord | null>({
-    path: "/bindings/current",
+  const bindings = await apiRequest<BindingRecord[]>({
+    path: "/bindings",
     method: "GET",
   });
+  const currentBinding = bindings[0] ?? null;
   const browserDesktopUrl = process.env.X_BROWSER_REMOTE_DESKTOP_URL?.trim() || null;
 
   return (
@@ -21,7 +22,7 @@ export default async function BindingsPage() {
       />
       <BindingConsole
         browserDesktopUrl={browserDesktopUrl}
-        currentBinding={currentBinding}
+        bindings={bindings}
         locale={locale}
       />
     </div>

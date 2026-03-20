@@ -53,7 +53,7 @@ export type BindingRecord = {
 
 type BindingConsoleProps = {
   browserDesktopUrl: string | null;
-  currentBinding: BindingRecord | null;
+  bindings: BindingRecord[];
   locale: Locale;
 };
 
@@ -200,7 +200,7 @@ function FieldLabel({
 
 export function BindingConsole({
   browserDesktopUrl,
-  currentBinding,
+  bindings,
   locale,
 }: BindingConsoleProps) {
   const messages = getMessages(locale);
@@ -239,6 +239,9 @@ export function BindingConsole({
   const [isBrowserSessionPending, startBrowserSessionTransition] = useTransition();
   const refreshedBrowserSessionIdRef = useRef<string | null>(null);
   const isBrowserSessionPollingRef = useRef(false);
+  const [selectedBindingId, setSelectedBindingId] = useState<string | null>(bindings[0]?.id ?? null);
+  const currentBinding =
+    bindings.find((binding) => binding.id === selectedBindingId) ?? bindings[0] ?? null;
 
   useEffect(() => {
     const storedSessionId = window.sessionStorage.getItem(browserBindingSessionStorageKey);
@@ -294,6 +297,20 @@ export function BindingConsole({
 
     window.sessionStorage.removeItem(browserBindingSessionStorageKey);
   }, [browserSession]);
+
+  useEffect(() => {
+    if (!browserSession?.bindingId) {
+      return;
+    }
+
+    const matchedBinding = bindings.find((binding) => binding.id === browserSession.bindingId);
+
+    if (!matchedBinding || matchedBinding.id === selectedBindingId) {
+      return;
+    }
+
+    setSelectedBindingId(matchedBinding.id);
+  }, [bindings, browserSession?.bindingId, selectedBindingId]);
 
   useEffect(() => {
     if (!browserSession || !isBrowserSessionActive(browserSession.status)) {
@@ -420,6 +437,91 @@ export function BindingConsole({
   return (
     <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
       <div className="space-y-6">
+        <Card className="rounded-[2rem] border-border/70 bg-white/90 shadow-[0_24px_80px_-40px_rgba(45,77,63,0.25)] dark:border-white/10 dark:bg-white/6 dark:shadow-[0_24px_80px_-40px_rgba(0,0,0,0.5)]">
+          <CardHeader className="gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-2xl">{messages.bindings.accountListTitle}</CardTitle>
+                <CardDescription className="mt-2 leading-6">
+                  {messages.bindings.accountListDescription}
+                </CardDescription>
+              </div>
+              <Badge className="rounded-full bg-[#eef4f0] text-[#2d4d3f] dark:bg-[#223228] dark:text-[#d8e2db]">
+                {formatMessage(messages.bindings.accountCount, {
+                  count: bindings.length,
+                })}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            {bindings.length > 0 ? (
+              bindings.map((binding) => {
+                const isSelected = binding.id === currentBinding?.id;
+
+                return (
+                  <button
+                    key={binding.id}
+                    type="button"
+                    onClick={() => setSelectedBindingId(binding.id)}
+                    className={cn(
+                      "rounded-[1.75rem] border px-5 py-4 text-left transition-colors",
+                      isSelected
+                        ? "border-[#2d4d3f]/40 bg-[#eef4f0] shadow-[0_16px_50px_-34px_rgba(45,77,63,0.45)] dark:border-[#d8e2db]/25 dark:bg-[#223228]"
+                        : "border-border/70 bg-[#fcfaf5] hover:border-[#c7b08a]/50 hover:bg-[#f8f3eb] dark:border-white/10 dark:bg-white/8 dark:hover:bg-white/12",
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-base font-semibold text-foreground">
+                          @{binding.username}
+                        </p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {binding.displayName ?? messages.common.noDisplayName}
+                        </p>
+                      </div>
+                      <StatusBadge
+                        label={messages.enums.bindingStatus[binding.status]}
+                        status={binding.status}
+                      />
+                    </div>
+                    <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                      <div>
+                        <dt className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                          {messages.bindings.lastValidatedAt}
+                        </dt>
+                        <dd className="mt-1 text-foreground">
+                          {formatDateTime(
+                            binding.lastValidatedAt,
+                            locale,
+                            messages.common.notRecorded,
+                          )}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                          {messages.bindings.nextCrawlAt}
+                        </dt>
+                        <dd className="mt-1 text-foreground">
+                          {formatDateTime(
+                            binding.crawlJob?.nextRunAt ?? binding.nextCrawlAt,
+                            locale,
+                            messages.common.notScheduled,
+                          )}
+                        </dd>
+                      </div>
+                    </dl>
+                  </button>
+                );
+              })
+            ) : (
+              <EmptyState
+                title={messages.bindings.emptyTitle}
+                description={messages.bindings.emptyDescription}
+              />
+            )}
+          </CardContent>
+        </Card>
+
         <Card className="rounded-[2rem] border-border/70 bg-white/90 shadow-[0_24px_80px_-40px_rgba(87,62,22,0.35)] dark:border-white/10 dark:bg-white/6 dark:shadow-[0_24px_80px_-40px_rgba(0,0,0,0.5)]">
           <CardHeader className="gap-3">
             <div className="flex items-center justify-between gap-3">
@@ -529,7 +631,11 @@ export function BindingConsole({
                 <CardDescription>{messages.bindings.crawlConfigDescription}</CardDescription>
               </CardHeader>
               <CardContent>
-                <form action={configAction} className="space-y-5">
+                <form
+                  key={`config-${currentBinding.id}`}
+                  action={configAction}
+                  className="space-y-5"
+                >
                   <input type="hidden" name="bindingId" value={currentBinding.id} />
                   <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-[#f8faf8] px-4 py-3 dark:border-white/10 dark:bg-white/8">
                     <div>
@@ -575,7 +681,11 @@ export function BindingConsole({
                 <CardDescription>{messages.bindings.operationsDescription}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <form action={manualCrawlAction} className="space-y-3">
+                <form
+                  key={`manual-${currentBinding.id}`}
+                  action={manualCrawlAction}
+                  className="space-y-3"
+                >
                   <input type="hidden" name="bindingId" value={currentBinding.id} />
                   <Button
                     type="submit"
@@ -586,7 +696,11 @@ export function BindingConsole({
                   </Button>
                   <FormFeedback state={manualCrawlState} />
                 </form>
-                <form action={validateAction} className="space-y-3">
+                <form
+                  key={`validate-${currentBinding.id}`}
+                  action={validateAction}
+                  className="space-y-3"
+                >
                   <input type="hidden" name="bindingId" value={currentBinding.id} />
                   <Button
                     type="submit"
@@ -598,7 +712,11 @@ export function BindingConsole({
                   </Button>
                   <FormFeedback state={validateState} />
                 </form>
-                <form action={disableAction} className="space-y-3">
+                <form
+                  key={`disable-${currentBinding.id}`}
+                  action={disableAction}
+                  className="space-y-3"
+                >
                   <input type="hidden" name="bindingId" value={currentBinding.id} />
                   <Button
                     type="submit"
@@ -611,6 +729,7 @@ export function BindingConsole({
                   <FormFeedback state={disableState} />
                 </form>
                 <form
+                  key={`unbind-${currentBinding.id}`}
                   action={unbindAction}
                   className="space-y-3"
                   onSubmit={handleUnbindSubmit}
@@ -791,7 +910,11 @@ export function BindingConsole({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form action={upsertAction} className="space-y-5">
+            <form
+              key={`upsert-${currentBinding?.id ?? "new"}`}
+              action={upsertAction}
+              className="space-y-5"
+            >
               <div className="grid gap-5 sm:grid-cols-2">
                 <div className="space-y-2">
                   <FieldLabel htmlFor="xUserId">{messages.bindings.xUserId}</FieldLabel>

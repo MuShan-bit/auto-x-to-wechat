@@ -163,6 +163,9 @@ type Messages = {
     eyebrow: string;
     title: string;
     description: string;
+    accountListTitle: string;
+    accountListDescription: string;
+    accountCount: string;
     statusTitle: string;
     statusDescription: string;
     credentialSource: string;
@@ -602,6 +605,9 @@ const messages: Record<Locale, Messages> = {
       eyebrow: "账号",
       title: "绑定",
       description: "这里已经接入真实 X 浏览器辅助绑定、自动 Cookie 回填、重新校验、抓取配置编辑和手动抓取联动。",
+      accountListTitle: "已绑定账号",
+      accountListDescription: "一个平台用户现在可以维护多个 X 账号。点击列表项即可切换下方的状态、配置与操作面板。",
+      accountCount: "{count} 个账号",
       statusTitle: "当前绑定状态",
       statusDescription: "这里会持续展示当前绑定账号、抓取开关、校验结果和下一次执行时间。",
       credentialSource: "凭证来源",
@@ -635,7 +641,7 @@ const messages: Record<Locale, Messages> = {
       browserAssistDescription:
         "点击下面的按钮后，系统会在当前机器自动打开一个可见的 X 登录窗口。你只需要手动完成登录，剩下的绑定与 Cookie 回填会自动完成。",
       browserAssistDescriptionBound:
-        "如果你想更换账号或刷新 X 登录态，直接重新发起一次浏览器登录即可。系统会自动回收账号信息和 Cookie，并覆盖当前绑定凭证。",
+        "如果你想刷新某个已绑定账号的登录态，或新增另一个 X 账号，直接重新发起一次浏览器登录即可。系统会自动识别当前登录的是已有账号还是新账号，并分别执行更新或新增绑定。",
       browserFlowTitle: "流程",
       browserFlowDescription: "浏览器窗口打开后，请直接在 X 页面里手动登录。当前页面会自动轮询会话状态，并在成功后刷新绑定信息。",
       browserStep1: "1. 点击“打开 X 登录窗口并开始绑定”。",
@@ -654,7 +660,7 @@ const messages: Record<Locale, Messages> = {
         "当前部署运行在容器远程桌面模式。点击按钮后会自动打开一个远程浏览器页签，请在其中完成 X 登录。",
       openBrowserDesktop: "打开远程登录桌面",
       advancedTitle: "高级手动录入",
-      advancedDescription: "仅在调试、导入历史凭证或处理非标准场景时使用。日常绑定建议优先走上面的浏览器辅助流程。",
+      advancedDescription: "仅在调试、导入历史凭证或处理非标准场景时使用。提交与已存在账号匹配时会更新原绑定，提交不同 X 账号时会新增一条绑定记录。",
       xUserId: "X 用户 ID",
       username: "用户名",
       displayName: "显示名",
@@ -1059,6 +1065,9 @@ const messages: Record<Locale, Messages> = {
       eyebrow: "Account",
       title: "Bindings",
       description: "This page already supports real X browser-assisted binding, automatic cookie capture, revalidation, crawl config editing, and manual crawl triggers.",
+      accountListTitle: "Bound accounts",
+      accountListDescription: "A single platform user can now maintain multiple X accounts. Select one from the list to switch the status, configuration, and actions shown below.",
+      accountCount: "{count} accounts",
       statusTitle: "Current binding status",
       statusDescription: "This panel continuously shows the current account, crawl switch, validation result, and next execution time.",
       credentialSource: "Credential source",
@@ -1092,7 +1101,7 @@ const messages: Record<Locale, Messages> = {
       browserAssistDescription:
         "After clicking the button below, the system opens a visible X login window on the current machine. You only need to complete the login manually, and the binding plus cookie capture will finish automatically.",
       browserAssistDescriptionBound:
-        "If you want to switch accounts or refresh the X login state, simply launch the browser login flow again. The system will automatically capture the account info and cookies, then overwrite the current binding credentials.",
+        "If you want to refresh the login state for an existing account or add another X account, simply launch the browser login flow again. The system will recognize whether the signed-in account already exists and update or create the binding accordingly.",
       browserFlowTitle: "Flow",
       browserFlowDescription: "Once the browser window opens, sign in on X directly. This page polls the session state automatically and refreshes binding info after success.",
       browserStep1: '1. Click "Open X login window and start binding".',
@@ -1111,7 +1120,7 @@ const messages: Record<Locale, Messages> = {
         "This deployment is using container-based remote desktop mode. After you click the button, a remote browser tab will open for the X sign-in flow.",
       openBrowserDesktop: "Open remote login desktop",
       advancedTitle: "Advanced manual input",
-      advancedDescription: "Use this only for debugging, importing historical credentials, or non-standard scenarios. For normal use, prefer the browser-assisted flow above.",
+      advancedDescription: "Use this only for debugging, importing historical credentials, or non-standard scenarios. Matching an existing X account updates that binding, while submitting a different account creates a new binding record.",
       xUserId: "X user ID",
       username: "Username",
       displayName: "Display name",
