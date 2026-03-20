@@ -48,6 +48,7 @@ import {
 } from './x-post-detection';
 
 const HOME_URL = 'https://x.com/home';
+const EXPLORE_TRENDING_URL = 'https://x.com/explore/tabs/trending';
 const LOGIN_URL = 'https://x.com/i/flow/login';
 const DESKTOP_VIEWPORT = {
   width: 1440,
@@ -258,12 +259,62 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
   }
 
   async fetchRecommendedFeed(payload: RealBrowserCredentialPayload) {
+    return this.fetchTimelineFeed(payload, {
+      diagnosticsLabel: 'X home timeline',
+      metadataSource: HOME_URL,
+      prepare: (page) =>
+        this.prepareFeedPageForScraping(page, {
+          selectPrimaryTimelineTab: true,
+          url: HOME_URL,
+        }),
+    });
+  }
+
+  async fetchHotFeed(payload: RealBrowserCredentialPayload) {
+    return this.fetchTimelineFeed(payload, {
+      diagnosticsLabel: 'X explore trending timeline',
+      metadataSource: EXPLORE_TRENDING_URL,
+      prepare: (page) =>
+        this.prepareFeedPageForScraping(page, {
+          selectPrimaryTimelineTab: false,
+          url: EXPLORE_TRENDING_URL,
+        }),
+    });
+  }
+
+  async resolvePostVideoMedia(
+    payload: RealBrowserCredentialPayload,
+    postUrl: string,
+    xPostId: string,
+  ) {
+    const session = await this.createAuthenticatedSession(payload);
+
+    try {
+      return await this.resolvePostVideoMediaInContext(
+        session.context,
+        postUrl,
+        xPostId,
+      );
+    } finally {
+      await session.context.close().catch(() => undefined);
+      await session.browser.close().catch(() => undefined);
+    }
+  }
+
+  private async fetchTimelineFeed(
+    payload: RealBrowserCredentialPayload,
+    input: {
+      diagnosticsLabel: string;
+      metadataSource: string;
+      prepare: (page: Page) => Promise<void>;
+    },
+  ) {
     const session = await this.createAuthenticatedSession(payload);
     const maxPosts =
       this.configService.get<number>('REAL_CRAWLER_MAX_POSTS') ?? 20;
 
     try {
-      await this.prepareHomeTimelineForScraping(session.page);
+      await input.prepare(session.page);
 
       const postsById = new Map<string, RawFeedResponse['posts'][number]>();
 
@@ -280,6 +331,7 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
 
         await this.advanceHomeTimeline(
           session.page,
+          input.metadataSource,
           iteration,
           batch.length === 0,
         );
@@ -293,7 +345,7 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
         const diagnostics = await this.capturePageDiagnostics(session.page);
 
         throw new CrawlerStructureChangedError(
-          `No visible posts were captured from the X home timeline (${diagnostics})`,
+          `No visible posts were captured from the ${input.diagnosticsLabel} (${diagnostics})`,
         );
       }
 
@@ -301,31 +353,12 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
         adapter: 'real',
         fetchedAt: new Date().toISOString(),
         metadata: {
-          source: 'https://x.com/home',
+          source: input.metadataSource,
           profileUsername: session.profile.username,
           scrapedCount: posts.length,
         },
         posts,
       } satisfies RawFeedResponse;
-    } finally {
-      await session.context.close().catch(() => undefined);
-      await session.browser.close().catch(() => undefined);
-    }
-  }
-
-  async resolvePostVideoMedia(
-    payload: RealBrowserCredentialPayload,
-    postUrl: string,
-    xPostId: string,
-  ) {
-    const session = await this.createAuthenticatedSession(payload);
-
-    try {
-      return await this.resolvePostVideoMediaInContext(
-        session.context,
-        postUrl,
-        xPostId,
-      );
     } finally {
       await session.context.close().catch(() => undefined);
       await session.browser.close().catch(() => undefined);
@@ -692,9 +725,17 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
     });
   }
 
-  private async prepareHomeTimelineForScraping(page: Page) {
+  private async prepareFeedPageForScraping(
+    page: Page,
+    input: {
+      selectPrimaryTimelineTab: boolean;
+      url: string;
+    },
+  ) {
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      await this.selectPrimaryTimelineTab(page);
+      if (input.selectPrimaryTimelineTab) {
+        await this.selectPrimaryTimelineTab(page);
+      }
 
       if (await this.waitForVisibleTweets(page, 7000)) {
         return;
@@ -708,13 +749,15 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
       }
 
       await page
-        .goto(HOME_URL, {
+        .goto(input.url, {
           waitUntil: 'domcontentloaded',
         })
         .catch(() => undefined);
       await page.waitForLoadState('domcontentloaded').catch(() => undefined);
       await page.waitForTimeout(1500);
-      await this.ensureAuthenticatedShell(page);
+      if (input.selectPrimaryTimelineTab) {
+        await this.ensureAuthenticatedShell(page);
+      }
     }
   }
 
@@ -1348,6 +1391,7 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
 
   private async advanceHomeTimeline(
     page: Page,
+    sourceUrl: string,
     iteration: number,
     shouldAggressivelyWakeTimeline: boolean,
   ) {
@@ -1356,7 +1400,7 @@ export class XBrowserAutomationService implements XBrowserAutomationPort {
 
       if (iteration >= 1) {
         await page
-          .goto(HOME_URL, {
+          .goto(sourceUrl, {
             waitUntil: 'domcontentloaded',
           })
           .catch(() => undefined);

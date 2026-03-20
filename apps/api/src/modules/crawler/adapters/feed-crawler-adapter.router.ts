@@ -28,6 +28,10 @@ export class FeedCrawlerAdapterRouter implements FeedCrawlerAdapter {
     return this.resolveAdapterFromPayload(payload).validateCredential(payload);
   }
 
+  fetchHotFeed(payload: string): Promise<RawFeedResponse> {
+    return this.resolveAdapterFromPayload(payload).fetchHotFeed(payload);
+  }
+
   fetchRecommendedFeed(payload: string): Promise<RawFeedResponse> {
     return this.resolveAdapterFromPayload(payload).fetchRecommendedFeed(
       payload,

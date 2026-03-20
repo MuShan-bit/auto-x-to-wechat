@@ -64,6 +64,7 @@ export type XBrowserAutomationPort = {
   createAuthenticatedSession(
     payload: RealBrowserCredentialPayload,
   ): Promise<AuthenticatedPageSession>;
+  fetchHotFeed(payload: RealBrowserCredentialPayload): Promise<RawFeedResponse>;
   fetchRecommendedFeed(
     payload: RealBrowserCredentialPayload,
   ): Promise<RawFeedResponse>;

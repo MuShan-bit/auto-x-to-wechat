@@ -105,6 +105,7 @@ export type NormalizedPost = {
 export interface FeedCrawlerAdapter {
   readonly name: string;
 
+  fetchHotFeed(payload: string): Promise<RawFeedResponse>;
   fetchRecommendedFeed(payload: string): Promise<RawFeedResponse>;
   normalizePosts(raw: RawFeedResponse): Promise<NormalizedPost[]>;
   validateCredential(payload: string): Promise<BindingProfile>;

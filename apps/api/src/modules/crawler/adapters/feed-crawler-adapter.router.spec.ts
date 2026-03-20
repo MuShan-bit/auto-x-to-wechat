@@ -40,18 +40,22 @@ describe('FeedCrawlerAdapterRouter', () => {
       get: jest.fn().mockReturnValue('mock'),
     } as unknown as ConfigService;
     const mockValidateCredential = jest.fn();
+    const mockFetchHotFeed = jest.fn();
     const mockFetchRecommendedFeed = jest.fn();
     const mockNormalizePosts = jest.fn();
     const mockAdapter = {
       validateCredential: mockValidateCredential,
+      fetchHotFeed: mockFetchHotFeed,
       fetchRecommendedFeed: mockFetchRecommendedFeed,
       normalizePosts: mockNormalizePosts,
     } as unknown as MockFeedCrawlerAdapter;
     const realValidateCredential = jest.fn().mockResolvedValue(profile);
+    const realFetchHotFeed = jest.fn().mockResolvedValue(rawFeed);
     const realFetchRecommendedFeed = jest.fn().mockResolvedValue(rawFeed);
     const realNormalizePosts = jest.fn().mockResolvedValue(normalizedPosts);
     const realAdapter = {
       validateCredential: realValidateCredential,
+      fetchHotFeed: realFetchHotFeed,
       fetchRecommendedFeed: realFetchRecommendedFeed,
       normalizePosts: realNormalizePosts,
     } as unknown as RealFeedCrawlerAdapter;
@@ -64,6 +68,7 @@ describe('FeedCrawlerAdapterRouter', () => {
     await expect(router.validateCredential(realPayload)).resolves.toEqual(
       profile,
     );
+    await expect(router.fetchHotFeed(realPayload)).resolves.toEqual(rawFeed);
     await expect(router.fetchRecommendedFeed(realPayload)).resolves.toEqual(
       rawFeed,
     );
@@ -72,9 +77,11 @@ describe('FeedCrawlerAdapterRouter', () => {
     );
 
     expect(realValidateCredential).toHaveBeenCalledWith(realPayload);
+    expect(realFetchHotFeed).toHaveBeenCalledWith(realPayload);
     expect(realFetchRecommendedFeed).toHaveBeenCalledWith(realPayload);
     expect(realNormalizePosts).toHaveBeenCalledWith(rawFeed);
     expect(mockValidateCredential).not.toHaveBeenCalled();
+    expect(mockFetchHotFeed).not.toHaveBeenCalled();
     expect(mockFetchRecommendedFeed).not.toHaveBeenCalled();
     expect(mockNormalizePosts).not.toHaveBeenCalled();
   });

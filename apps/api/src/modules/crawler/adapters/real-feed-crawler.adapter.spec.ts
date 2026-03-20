@@ -34,19 +34,24 @@ describe('RealFeedCrawlerAdapter', () => {
       fetchedAt: '2026-03-19T00:00:00.000Z',
       posts: [],
     } satisfies RawFeedResponse;
+    const fetchHotFeed = jest.fn().mockResolvedValue(expectedResponse);
     const fetchRecommendedFeed = jest.fn().mockResolvedValue(expectedResponse);
     const validateCredential = jest.fn();
     const browserAutomationService = {
+      fetchHotFeed,
       fetchRecommendedFeed,
       validateCredential,
     } as unknown as XBrowserAutomationService;
     const adapter = new RealFeedCrawlerAdapter(browserAutomationService);
 
     const rawFeed = await adapter.fetchRecommendedFeed(JSON.stringify(payload));
+    const hotFeed = await adapter.fetchHotFeed(JSON.stringify(payload));
 
     expect(fetchRecommendedFeed).toHaveBeenCalledWith(payload);
+    expect(fetchHotFeed).toHaveBeenCalledWith(payload);
     expect(validateCredential).not.toHaveBeenCalled();
     expect(rawFeed).toEqual(expectedResponse);
+    expect(hotFeed).toEqual(expectedResponse);
   });
 
   it('validates real credentials through browser automation and merges fallback profile fields', async () => {
@@ -55,6 +60,7 @@ describe('RealFeedCrawlerAdapter', () => {
       displayName: 'Validated Owner',
     } satisfies BindingProfile);
     const browserAutomationService = {
+      fetchHotFeed: jest.fn(),
       fetchRecommendedFeed: jest.fn(),
       validateCredential,
     } as unknown as XBrowserAutomationService;
@@ -73,6 +79,7 @@ describe('RealFeedCrawlerAdapter', () => {
 
   it('normalizes DOM-shaped raw posts into stable archive input', async () => {
     const browserAutomationService = {
+      fetchHotFeed: jest.fn(),
       fetchRecommendedFeed: jest.fn(),
       validateCredential: jest.fn(),
     } as unknown as XBrowserAutomationService;

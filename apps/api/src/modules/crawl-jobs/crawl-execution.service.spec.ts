@@ -168,4 +168,61 @@ describe('CrawlExecutionService', () => {
       }),
     );
   });
+
+  it('processes a hot crawl profile through the dedicated feed branch', async () => {
+    const binding = await prisma.xAccountBinding.create({
+      data: {
+        userId: 'worker_owner',
+        xUserId: 'x-hot-worker',
+        username: 'worker_hot_demo',
+        displayName: 'Worker Hot Demo',
+        status: BindingStatus.ACTIVE,
+        credentialSource: CredentialSource.WEB_LOGIN,
+        authPayloadEncrypted: credentialCryptoService.encrypt(
+          '{"cookie":"worker-hot"}',
+        ),
+        lastValidatedAt: new Date('2026-03-19T00:00:00.000Z'),
+        crawlEnabled: true,
+        crawlIntervalMinutes: 45,
+        nextCrawlAt: new Date('2026-03-19T12:00:00.000Z'),
+        crawlJob: {
+          create: {
+            enabled: true,
+            intervalMinutes: 45,
+            nextRunAt: new Date('2026-03-19T12:00:00.000Z'),
+          },
+        },
+        crawlProfiles: {
+          create: [
+            {
+              mode: CrawlMode.HOT,
+              enabled: true,
+              intervalMinutes: 45,
+              maxPosts: 10,
+              nextRunAt: new Date('2026-03-19T12:00:00.000Z'),
+            },
+          ],
+        },
+      },
+      include: {
+        crawlProfiles: true,
+      },
+    });
+
+    const run = await crawlRunsService.createQueuedRun({
+      bindingId: binding.id,
+      crawlProfileId: binding.crawlProfiles[0]?.id,
+      triggerType: CrawlTriggerType.MANUAL,
+    });
+
+    const processedRun = await crawlExecutionService.processRun(run.id);
+    const storedProfile = await prisma.crawlProfile.findUnique({
+      where: { id: binding.crawlProfiles[0]!.id },
+    });
+
+    expect(processedRun.status).toBe(CrawlRunStatus.SUCCESS);
+    expect(processedRun.crawlProfileId).toBe(binding.crawlProfiles[0]!.id);
+    expect(processedRun.fetchedCount).toBe(2);
+    expect(storedProfile?.lastRunAt).not.toBeNull();
+  });
 });

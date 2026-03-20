@@ -35,6 +35,19 @@ describe('MockFeedCrawlerAdapter', () => {
     });
   });
 
+  it('returns a distinct hot-feed payload for trending mode', async () => {
+    const response = await adapter.fetchHotFeed(
+      JSON.stringify({
+        cookie: 'demo-cookie',
+      }),
+    );
+
+    expect(response.metadata).toMatchObject({
+      source: 'mock-hot',
+    });
+    expect(response.posts[0]?.xPostId).toBe('mock-hot-post-001');
+  });
+
   it('classifies exhausted network retries as network errors', async () => {
     await expect(
       adapter.fetchRecommendedFeed(

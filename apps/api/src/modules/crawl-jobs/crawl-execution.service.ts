@@ -355,6 +355,7 @@ export class CrawlExecutionService {
       case CrawlMode.RECOMMENDED:
         return this.feedCrawlerAdapter.fetchRecommendedFeed(payload);
       case CrawlMode.HOT:
+        return this.feedCrawlerAdapter.fetchHotFeed(payload);
       case CrawlMode.SEARCH:
         throw new Error(`Crawl mode ${mode} is not implemented yet`);
     }

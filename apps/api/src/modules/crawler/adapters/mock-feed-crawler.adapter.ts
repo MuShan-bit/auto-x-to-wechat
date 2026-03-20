@@ -49,6 +49,21 @@ export class MockFeedCrawlerAdapter implements FeedCrawlerAdapter {
   }
 
   async fetchRecommendedFeed(payload: string): Promise<RawFeedResponse> {
+    return this.fetchMockFeed(payload, 'recommended');
+  }
+
+  async fetchHotFeed(payload: string): Promise<RawFeedResponse> {
+    return this.fetchMockFeed(payload, 'hot');
+  }
+
+  normalizePosts(raw: RawFeedResponse): Promise<NormalizedPost[]> {
+    return Promise.resolve(normalizeRawFeedPosts(raw));
+  }
+
+  private async fetchMockFeed(
+    payload: string,
+    feedKind: 'recommended' | 'hot',
+  ): Promise<RawFeedResponse> {
     const profile = await this.validateCredential(payload);
     const parsed = this.parseCredential(payload);
     let attempt = 0;
@@ -58,16 +73,12 @@ export class MockFeedCrawlerAdapter implements FeedCrawlerAdapter {
         attempt += 1;
         this.throwMockFailure(parsed, attempt);
 
-        return this.buildMockResponse(profile, attempt);
+        return this.buildMockResponse(profile, attempt, feedKind);
       },
       {
         baseDelayMs: 0,
       },
     );
-  }
-
-  normalizePosts(raw: RawFeedResponse): Promise<NormalizedPost[]> {
-    return Promise.resolve(normalizeRawFeedPosts(raw));
   }
 
   private parseCredential(payload: string): MockCredentialPayload {
@@ -105,21 +116,27 @@ export class MockFeedCrawlerAdapter implements FeedCrawlerAdapter {
   private buildMockResponse(
     profile: BindingProfile,
     attempt: number,
+    feedKind: 'recommended' | 'hot',
   ): RawFeedResponse {
     const now = new Date().toISOString();
+    const source = feedKind === 'hot' ? 'mock-hot' : 'mock';
+    const firstPostId =
+      feedKind === 'hot' ? 'mock-hot-post-001' : 'mock-post-001';
+    const secondPostId =
+      feedKind === 'hot' ? 'mock-hot-post-002' : 'mock-post-002';
 
     return {
       adapter: this.name,
       fetchedAt: now,
       metadata: {
         attempts: attempt,
-        source: 'mock',
+        source,
         username: profile.username ?? 'mock_user',
       },
       posts: [
         {
-          xPostId: 'mock-post-001',
-          postUrl: 'https://x.com/mock_user/status/mock-post-001',
+          xPostId: firstPostId,
+          postUrl: `https://x.com/mock_user/status/${firstPostId}`,
           postType: PostType.POST,
           author: {
             xUserId: 'x_author_001',
@@ -128,7 +145,9 @@ export class MockFeedCrawlerAdapter implements FeedCrawlerAdapter {
             avatarUrl: 'https://images.example.com/openai-newsroom.png',
           },
           rawText:
-            'GPT-5.4 release notes are live. This mock post helps us verify archive flows.',
+            feedKind === 'hot'
+              ? 'Trending now: this hot-feed mock post verifies the explore capture flow.'
+              : 'GPT-5.4 release notes are live. This mock post helps us verify archive flows.',
           sourceCreatedAt: now,
           language: 'en',
           entities: {
@@ -162,13 +181,14 @@ export class MockFeedCrawlerAdapter implements FeedCrawlerAdapter {
             viewCount: 2048,
           },
           rawPayload: {
-            id: 'mock-post-001',
+            id: firstPostId,
             adapter: this.name,
+            feedKind,
           },
         },
         {
-          xPostId: 'mock-post-002',
-          postUrl: 'https://x.com/mock_user/status/mock-post-002',
+          xPostId: secondPostId,
+          postUrl: `https://x.com/mock_user/status/${secondPostId}`,
           postType: PostType.QUOTE,
           author: {
             xUserId: 'x_author_002',
@@ -176,7 +196,9 @@ export class MockFeedCrawlerAdapter implements FeedCrawlerAdapter {
             displayName: 'Product Updates',
           },
           rawText:
-            'Quoting a trend observation from the recommendation feed for pagination testing.',
+            feedKind === 'hot'
+              ? 'Quoting a hot topic observation from the explore feed for pagination testing.'
+              : 'Quoting a trend observation from the recommendation feed for pagination testing.',
           sourceCreatedAt: now,
           language: 'en',
           entities: {
@@ -204,8 +226,9 @@ export class MockFeedCrawlerAdapter implements FeedCrawlerAdapter {
             viewCount: 320,
           },
           rawPayload: {
-            id: 'mock-post-002',
+            id: secondPostId,
             adapter: this.name,
+            feedKind,
           },
         },
       ],
