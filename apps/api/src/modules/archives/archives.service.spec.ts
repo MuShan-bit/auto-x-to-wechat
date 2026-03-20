@@ -6,6 +6,7 @@ import {
   MediaType,
   PostType,
   RelationType,
+  TaxonomySource,
   UserRole,
 } from '@prisma/client';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -43,6 +44,23 @@ describe('ArchivesService', () => {
 
     await prisma.xAccountBinding.deleteMany({
       where: { userId: 'archive_owner' },
+    });
+    await prisma.archivedPostTag.deleteMany({
+      where: {
+        tag: {
+          userId: 'archive_owner',
+        },
+      },
+    });
+    await prisma.tag.deleteMany({
+      where: {
+        userId: 'archive_owner',
+      },
+    });
+    await prisma.category.deleteMany({
+      where: {
+        userId: 'archive_owner',
+      },
     });
   });
 
@@ -385,6 +403,108 @@ describe('ArchivesService', () => {
     expect(bySingleTag.items[0]?.id).toBe(aiPost.id);
 
     expect(byAnyTag.items).toHaveLength(2);
+  });
+
+  it('updates archive taxonomy with manual category and tags while preserving AI tag sources', async () => {
+    const binding = await createBinding('archive_taxonomy_editor');
+    const aiCategory = await prisma.category.create({
+      data: {
+        userId: 'archive_owner',
+        name: 'AI Suggested',
+        slug: 'ai-suggested',
+        color: '#6366f1',
+      },
+    });
+    const manualCategory = await prisma.category.create({
+      data: {
+        userId: 'archive_owner',
+        name: 'Manual Review',
+        slug: 'manual-review',
+        color: '#2563eb',
+      },
+    });
+    const aiTag = await prisma.tag.create({
+      data: {
+        userId: 'archive_owner',
+        name: 'LLM',
+        slug: 'llm',
+        color: '#7c3aed',
+      },
+    });
+    const manualTag = await prisma.tag.create({
+      data: {
+        userId: 'archive_owner',
+        name: 'OpenAI',
+        slug: 'openai',
+        color: '#10b981',
+      },
+    });
+
+    const archivedPost = await archivesService.createArchivedPost({
+      bindingId: binding.id,
+      xPostId: 'post-taxonomy-editor',
+      postUrl:
+        'https://x.com/archive_taxonomy_editor/status/post-taxonomy-editor',
+      postType: PostType.POST,
+      author: {
+        username: 'archive_taxonomy_editor',
+      },
+      rawText: 'AI generated labels should remain visible after manual edits',
+      richTextJson: { version: 1, blocks: [] },
+      rawPayloadJson: { id: 'post-taxonomy-editor' },
+      sourceCreatedAt: '2026-03-19T12:00:00.000Z',
+    });
+
+    await prisma.archivedPost.update({
+      where: {
+        id: archivedPost.id,
+      },
+      data: {
+        primaryCategoryId: aiCategory.id,
+        primaryCategorySource: TaxonomySource.AI,
+      },
+    });
+    await prisma.archivedPostTag.create({
+      data: {
+        archivedPostId: archivedPost.id,
+        tagId: aiTag.id,
+        source: TaxonomySource.AI,
+      },
+    });
+
+    const updated = await archivesService.updateArchivedPostTaxonomyForUser(
+      'archive_owner',
+      archivedPost.id,
+      {
+        primaryCategoryId: manualCategory.id,
+        tagIds: [manualTag.id, aiTag.id],
+      },
+    );
+
+    expect(updated.primaryCategory?.id).toBe(manualCategory.id);
+    expect(updated.primaryCategorySource).toBe(TaxonomySource.MANUAL);
+    expect(updated.tagAssignments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: TaxonomySource.AI,
+          tag: expect.objectContaining({
+            id: aiTag.id,
+          }),
+        }),
+        expect.objectContaining({
+          source: TaxonomySource.MANUAL,
+          tag: expect.objectContaining({
+            id: aiTag.id,
+          }),
+        }),
+        expect.objectContaining({
+          source: TaxonomySource.MANUAL,
+          tag: expect.objectContaining({
+            id: manualTag.id,
+          }),
+        }),
+      ]),
+    );
   });
 
   it('falls back to the existing archive when concurrent writes hit the unique constraint', async () => {

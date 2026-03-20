@@ -401,6 +401,24 @@ type Messages = {
     noMediaDescription: string;
     openRelatedPost: string;
     targetAuthor: string;
+    taxonomyTitle: string;
+    taxonomyDescription: string;
+    currentCategoryLabel: string;
+    noPrimaryCategory: string;
+    manualTagsLabel: string;
+    aiTagsLabel: string;
+    ruleTagsLabel: string;
+    noManualTags: string;
+    noAiTags: string;
+    noRuleTags: string;
+    primaryCategoryLabel: string;
+    chooseCategory: string;
+    tagsFieldLabel: string;
+    taxonomyEditorHint: string;
+    noTagOptions: string;
+    taxonomyLoadError: string;
+    saveTaxonomy: string;
+    saveTaxonomyPending: string;
   };
   runs: {
     eyebrow: string;
@@ -493,6 +511,7 @@ type Messages = {
     >;
     actionType: Record<"CREATED" | "SKIPPED" | "FAILED", string>;
     relationType: Record<"QUOTE" | "REPOST" | "REPLY", string>;
+    taxonomySource: Record<"MANUAL" | "AI" | "RULE", string>;
   };
   actions: {
     login: {
@@ -534,6 +553,11 @@ type Messages = {
       viewTriggeredRun: string;
       manualCrawlTriggered: string;
       profileManualTriggered: string;
+    };
+    archives: {
+      missingArchiveId: string;
+      taxonomyUpdated: string;
+      taxonomyValidationFailed: string;
     };
     api: {
       unauthorized: string;
@@ -1030,6 +1054,26 @@ const messages: Record<Locale, Messages> = {
         "当前帖子只包含文本内容，富文本正文中不会出现图片或视频块。",
       openRelatedPost: "打开关联原帖",
       targetAuthor: "目标作者：@{username}",
+      taxonomyTitle: "分类与标签",
+      taxonomyDescription:
+        "在这里维护人工主分类和多标签，同时保留 AI 或规则来源，方便后续筛选和报告汇总。",
+      currentCategoryLabel: "当前主分类",
+      noPrimaryCategory: "尚未设置主分类",
+      manualTagsLabel: "人工标签",
+      aiTagsLabel: "AI 标签",
+      ruleTagsLabel: "规则标签",
+      noManualTags: "还没有人工标签",
+      noAiTags: "还没有 AI 标签",
+      noRuleTags: "还没有规则标签",
+      primaryCategoryLabel: "人工主分类",
+      chooseCategory: "不设置主分类",
+      tagsFieldLabel: "人工标签选择",
+      taxonomyEditorHint:
+        "勾选后会写入 `MANUAL` 来源标签；已有 AI 或规则标签会继续保留在摘要里。",
+      noTagOptions: "当前还没有可选标签，请先在后续设置页中创建标签。",
+      taxonomyLoadError: "分类与标签选项加载失败。",
+      saveTaxonomy: "保存人工分类与标签",
+      saveTaxonomyPending: "正在保存分类与标签...",
     },
     runs: {
       eyebrow: "任务历史",
@@ -1152,6 +1196,11 @@ const messages: Record<Locale, Messages> = {
         REPOST: "转推",
         REPLY: "回复",
       },
+      taxonomySource: {
+        MANUAL: "人工",
+        AI: "AI",
+        RULE: "规则",
+      },
     },
     actions: {
       login: {
@@ -1196,6 +1245,11 @@ const messages: Record<Locale, Messages> = {
           "手动抓取已执行，当前状态：{status}（{triggerType}）。",
         profileManualTriggered:
           "策略抓取已执行，当前状态：{status}（{triggerType}）。",
+      },
+      archives: {
+        missingArchiveId: "缺少归档 ID。",
+        taxonomyUpdated: "人工分类与标签已保存。",
+        taxonomyValidationFailed: "归档分类标签校验失败。",
       },
       api: {
         unauthorized: "未登录或会话已失效。",
@@ -1688,6 +1742,27 @@ const messages: Record<Locale, Messages> = {
         "The current post contains only text, so no image or video blocks appear in the rich text body.",
       openRelatedPost: "Open related post",
       targetAuthor: "Target author: @{username}",
+      taxonomyTitle: "Category and tags",
+      taxonomyDescription:
+        "Manage manual categories and multi-tags here while keeping AI and rule sources visible for later filtering and reporting.",
+      currentCategoryLabel: "Current primary category",
+      noPrimaryCategory: "No primary category set",
+      manualTagsLabel: "Manual tags",
+      aiTagsLabel: "AI tags",
+      ruleTagsLabel: "Rule tags",
+      noManualTags: "No manual tags yet",
+      noAiTags: "No AI tags yet",
+      noRuleTags: "No rule tags yet",
+      primaryCategoryLabel: "Manual primary category",
+      chooseCategory: "No primary category",
+      tagsFieldLabel: "Manual tag selection",
+      taxonomyEditorHint:
+        "Checked items are stored as `MANUAL` tags. Existing AI or rule tags remain visible in the summary.",
+      noTagOptions:
+        "No tag options are available yet. Create tags from the settings page later.",
+      taxonomyLoadError: "Failed to load taxonomy options.",
+      saveTaxonomy: "Save manual category and tags",
+      saveTaxonomyPending: "Saving category and tags...",
     },
     runs: {
       eyebrow: "Task history",
@@ -1810,6 +1885,11 @@ const messages: Record<Locale, Messages> = {
         REPOST: "Repost",
         REPLY: "Reply",
       },
+      taxonomySource: {
+        MANUAL: "Manual",
+        AI: "AI",
+        RULE: "Rule",
+      },
     },
     actions: {
       login: {
@@ -1856,6 +1936,12 @@ const messages: Record<Locale, Messages> = {
           "Manual crawl was triggered. Current status: {status} ({triggerType}).",
         profileManualTriggered:
           "Profile run was triggered. Current status: {status} ({triggerType}).",
+      },
+      archives: {
+        missingArchiveId: "Missing archive ID.",
+        taxonomyUpdated: "Manual category and tags have been saved.",
+        taxonomyValidationFailed:
+          "Archive taxonomy validation failed. Please check the form.",
       },
       api: {
         unauthorized: "Not signed in or the session has expired.",

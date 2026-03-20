@@ -1,9 +1,18 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { InternalAuthGuard } from '../../common/auth/internal-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { RequestUser } from '../../common/auth/request-user.type';
 import { serializeForJson } from '../../common/utils/json-serializer';
 import { ListArchivesQueryDto } from './dto/list-archives-query.dto';
+import { UpdateArchiveTaxonomyDto } from './dto/update-archive-taxonomy.dto';
 import { ArchivesService } from './archives.service';
 
 function normalizeOptionalQueryNumber(value: number | string | undefined) {
@@ -49,6 +58,17 @@ export class ArchivesController {
   ) {
     return this.archivesService
       .getArchivedPostDetailForUser(user.id, archivedPostId)
+      .then((payload) => serializeForJson(payload));
+  }
+
+  @Patch(':id/taxonomy')
+  updateArchiveTaxonomy(
+    @CurrentUser() user: RequestUser,
+    @Param('id') archivedPostId: string,
+    @Body() dto: UpdateArchiveTaxonomyDto,
+  ) {
+    return this.archivesService
+      .updateArchivedPostTaxonomyForUser(user.id, archivedPostId, dto)
       .then((payload) => serializeForJson(payload));
   }
 }

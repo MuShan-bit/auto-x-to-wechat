@@ -4,6 +4,7 @@ import {
   type ArchiveStatus,
   type MediaType,
   type RelationType,
+  TaxonomySource,
 } from '@prisma/client';
 import {
   BadRequestException,
@@ -24,6 +25,7 @@ import {
   type RichTextMediaBlock,
 } from './rich-text.converter';
 import { renderRichTextToHtml } from './rich-text.renderer';
+import { UpdateArchiveTaxonomyDto } from './dto/update-archive-taxonomy.dto';
 
 type CreateArchivedPostMediaInput = {
   durationMs?: number;
@@ -263,6 +265,113 @@ export class ArchivesService {
     }
 
     return this.repairEphemeralVideoMediaSources(archivedPost);
+  }
+
+  async updateArchivedPostTaxonomyForUser(
+    userId: string,
+    archivedPostId: string,
+    dto: UpdateArchiveTaxonomyDto,
+  ) {
+    const archivedPost = await this.prisma.archivedPost.findFirst({
+      where: {
+        id: archivedPostId,
+        binding: {
+          userId,
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!archivedPost) {
+      throw new NotFoundException('Archived post not found');
+    }
+
+    let primaryCategoryId = dto.primaryCategoryId;
+
+    if (primaryCategoryId) {
+      const category = await this.prisma.category.findFirst({
+        where: {
+          id: primaryCategoryId,
+          userId,
+          isActive: true,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (!category) {
+        throw new BadRequestException('Primary category is unavailable');
+      }
+
+      primaryCategoryId = category.id;
+    }
+
+    const tagIds =
+      dto.tagIds === undefined ? undefined : [...new Set(dto.tagIds)];
+
+    if (tagIds && tagIds.length > 0) {
+      const availableTags = await this.prisma.tag.findMany({
+        where: {
+          id: {
+            in: tagIds,
+          },
+          userId,
+          isActive: true,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (availableTags.length !== tagIds.length) {
+        throw new BadRequestException('One or more tags are unavailable');
+      }
+    }
+
+    if (primaryCategoryId === undefined && tagIds === undefined) {
+      return this.getArchivedPostDetailForUser(userId, archivedPostId);
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      if (primaryCategoryId !== undefined) {
+        await tx.archivedPost.update({
+          where: {
+            id: archivedPostId,
+          },
+          data: {
+            primaryCategoryId,
+            primaryCategorySource: primaryCategoryId
+              ? TaxonomySource.MANUAL
+              : null,
+          },
+        });
+      }
+
+      if (tagIds !== undefined) {
+        await tx.archivedPostTag.deleteMany({
+          where: {
+            archivedPostId,
+            source: TaxonomySource.MANUAL,
+          },
+        });
+
+        if (tagIds.length > 0) {
+          await tx.archivedPostTag.createMany({
+            data: tagIds.map((tagId) => ({
+              archivedPostId,
+              tagId,
+              source: TaxonomySource.MANUAL,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
+    });
+
+    return this.getArchivedPostDetailForUser(userId, archivedPostId);
   }
 
   async listArchivedPostsByBinding(

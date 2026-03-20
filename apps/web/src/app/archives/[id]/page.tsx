@@ -26,6 +26,11 @@ import {
 } from "@/lib/api-client";
 import { formatMessage, getIntlLocale, type Locale } from "@/lib/i18n";
 import { getRequestMessages } from "@/lib/request-locale";
+import {
+  ArchiveTaxonomyEditor,
+  type ArchiveTagAssignment,
+  type TaxonomyOption,
+} from "./archive-taxonomy-editor";
 
 type ArchiveDetailPageProps = {
   params: Promise<{
@@ -50,6 +55,8 @@ type ArchiveDetailResponse = {
   quoteCount: number | null;
   favoriteCount: number | null;
   viewCount: string | null;
+  primaryCategory: TaxonomyOption | null;
+  primaryCategorySource: "MANUAL" | "AI" | "RULE" | null;
   mediaItems: Array<{
     id: string;
     mediaType: "IMAGE" | "VIDEO" | "GIF";
@@ -59,6 +66,7 @@ type ArchiveDetailResponse = {
     height: number | null;
     durationMs: number | null;
   }>;
+  tagAssignments: ArchiveTagAssignment[];
   relations: Array<{
     id: string;
     relationType: "QUOTE" | "REPOST" | "REPLY";
@@ -83,6 +91,8 @@ type ArchiveDetailResponse = {
     triggerType: "MANUAL" | "SCHEDULED" | "RETRY";
   };
 };
+
+type TaxonomyOptionsResponse = TaxonomyOption[];
 
 function formatDateTime(value: string, locale: Locale) {
   return new Intl.DateTimeFormat(getIntlLocale(locale), {
@@ -124,12 +134,45 @@ async function getArchiveDetail(id: string) {
   }
 }
 
+async function getTaxonomyOptions() {
+  const { messages } = await getRequestMessages();
+
+  try {
+    const [categories, tags] = await Promise.all([
+      apiRequest<TaxonomyOptionsResponse>({
+        path: "/taxonomy/categories",
+        method: "GET",
+      }),
+      apiRequest<TaxonomyOptionsResponse>({
+        path: "/taxonomy/tags",
+        method: "GET",
+      }),
+    ]);
+
+    return {
+      categories,
+      tags,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      categories: [] as TaxonomyOptionsResponse,
+      tags: [] as TaxonomyOptionsResponse,
+      error: getApiErrorMessage(
+        error,
+        messages.archiveDetail.taxonomyLoadError,
+      ),
+    };
+  }
+}
+
 export default async function ArchiveDetailPage({
   params,
 }: ArchiveDetailPageProps) {
   const { locale, messages } = await getRequestMessages();
   const { id } = await params;
   const { archive, error } = await getArchiveDetail(id);
+  const taxonomyOptions = archive ? await getTaxonomyOptions() : null;
 
   return (
     <div className="space-y-8">
@@ -272,6 +315,19 @@ export default async function ArchiveDetailPage({
           </div>
 
           <div className="space-y-6">
+            {archive ? (
+              <ArchiveTaxonomyEditor
+                archiveId={archive.id}
+                categories={taxonomyOptions?.categories ?? []}
+                loadError={taxonomyOptions?.error}
+                locale={locale}
+                primaryCategory={archive.primaryCategory}
+                primaryCategorySource={archive.primaryCategorySource}
+                tagAssignments={archive.tagAssignments}
+                tags={taxonomyOptions?.tags ?? []}
+              />
+            ) : null}
+
             <Card className="rounded-[2rem] border-border/70 bg-white/92 shadow-[0_24px_80px_-40px_rgba(87,62,22,0.24)] dark:border-white/10 dark:bg-white/6 dark:shadow-[0_24px_80px_-40px_rgba(0,0,0,0.5)]">
               <CardHeader>
                 <CardTitle className="text-2xl">
