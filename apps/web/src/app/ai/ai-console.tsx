@@ -968,15 +968,9 @@ function TaskAuditTableRow({
               </Badge>
             ) : null}
           </div>
-          {record.errorMessage ? (
-            <p className="text-sm leading-6 text-red-700 dark:text-red-200">
-              {record.errorMessage}
-            </p>
-          ) : (
-            <p className="text-sm leading-6 text-muted-foreground">
-              {messages.enums.aiTaskStatus[record.status]}
-            </p>
-          )}
+          <p className="text-sm leading-6 text-muted-foreground">
+            {messages.enums.aiTaskStatus[record.status]}
+          </p>
         </div>
       </TableCell>
 
@@ -1029,6 +1023,19 @@ function TaskAuditTableRow({
           </p>
         </div>
       </TableCell>
+
+      <TableCell className="min-w-[260px] py-4">
+        <p
+          className={cn(
+            "break-words whitespace-normal text-sm leading-6",
+            record.errorMessage
+              ? "text-red-700 dark:text-red-200"
+              : "text-muted-foreground",
+          )}
+        >
+          {record.errorMessage ?? messages.common.notRecorded}
+        </p>
+      </TableCell>
     </TableRow>
   );
 }
@@ -1064,6 +1071,7 @@ function TaskAuditTable({
               <TableHead>{messages.ai.auditTargetLabel}</TableHead>
               <TableHead>{messages.ai.auditUsageHeader}</TableHead>
               <TableHead>{messages.ai.auditTimeHeader}</TableHead>
+              <TableHead>{messages.ai.auditErrorHeader}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -1284,7 +1292,7 @@ export function AiConsole({
         />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+      <div className="space-y-6">
         <Card className="rounded-[2rem] border-border/70 bg-white/78 py-0 shadow-[0_24px_80px_-40px_rgba(87,62,22,0.35)] dark:border-white/10 dark:bg-white/6 dark:shadow-[0_24px_80px_-40px_rgba(0,0,0,0.5)]">
           <CardHeader className="border-b border-border/60 px-6 py-5 dark:border-white/8">
             <div className="space-y-1">

@@ -443,6 +443,7 @@ type Messages = {
     auditTargetLabel: string;
     auditUsageHeader: string;
     auditTimeHeader: string;
+    auditErrorHeader: string;
     auditTokensLabel: string;
     auditCostLabel: string;
     rateLimitedBadge: string;
@@ -1314,6 +1315,7 @@ const messages: Record<Locale, Messages> = {
       auditTargetLabel: "目标对象",
       auditUsageHeader: "Token 与成本",
       auditTimeHeader: "时间",
+      auditErrorHeader: "失败描述",
       auditTokensLabel: "Token",
       auditCostLabel: "成本",
       rateLimitedBadge: "触发限流",
@@ -2250,6 +2252,7 @@ const messages: Record<Locale, Messages> = {
       auditTargetLabel: "Target",
       auditUsageHeader: "Tokens and cost",
       auditTimeHeader: "Timing",
+      auditErrorHeader: "Failure details",
       auditTokensLabel: "Tokens",
       auditCostLabel: "Cost",
       rateLimitedBadge: "Rate limited",
