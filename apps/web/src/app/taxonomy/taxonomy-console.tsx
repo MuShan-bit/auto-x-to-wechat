@@ -37,7 +37,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getMessages, type Locale } from "@/lib/i18n";
+import { formatMessage, getMessages, type Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 type TaxonomyConsoleProps = {
@@ -55,6 +55,7 @@ type TaxonomyDialogState =
   | null;
 
 const initialActionState: TaxonomyActionState = {};
+const TAXONOMY_PAGE_SIZE = 8;
 
 function ActionFeedback({ state }: { state: TaxonomyActionState }) {
   if (state.error) {
@@ -143,6 +144,61 @@ function renderColorToken(color: string | null, emptyLabel: string) {
       />
       {color}
     </span>
+  );
+}
+
+function SectionPaginationFooter({
+  locale,
+  onNextPage,
+  onPreviousPage,
+  page,
+  total,
+  totalPages,
+}: {
+  locale: Locale;
+  onNextPage: () => void;
+  onPreviousPage: () => void;
+  page: number;
+  total: number;
+  totalPages: number;
+}) {
+  const messages = getMessages(locale);
+
+  return (
+    <div className="flex flex-col gap-4 border-t border-border/60 pt-4 dark:border-white/10 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p className="text-sm font-medium text-foreground">
+          {formatMessage(messages.pagination.pageSummary, {
+            page,
+            totalPages,
+          })}
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {formatMessage(messages.pagination.totalRecords, { total })}
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        <Button
+          className="h-9 rounded-full border border-border bg-white px-4 text-foreground hover:bg-muted dark:border-white/10 dark:bg-white/8 dark:hover:bg-white/12"
+          disabled={page <= 1}
+          onClick={onPreviousPage}
+          type="button"
+          variant="outline"
+        >
+          {messages.pagination.previous}
+        </Button>
+        <Button
+          className="h-9 rounded-full bg-[#2d4d3f] px-4 text-white hover:bg-[#20372d] dark:bg-[#d8e2db] dark:text-[#18201b] dark:hover:bg-[#c8d3cb]"
+          disabled={page >= totalPages}
+          onClick={onNextPage}
+          type="button"
+        >
+          {page >= totalPages
+            ? messages.pagination.reachedEnd
+            : messages.pagination.next}
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -423,6 +479,11 @@ function CategorySection({
   locale,
   onCreate,
   onEdit,
+  onNextPage,
+  onPreviousPage,
+  page,
+  total,
+  totalPages,
 }: {
   categories: CategoryRecord[];
   disableState: TaxonomyActionState;
@@ -431,6 +492,11 @@ function CategorySection({
   locale: Locale;
   onCreate: () => void;
   onEdit: (categoryId: string) => void;
+  onNextPage: () => void;
+  onPreviousPage: () => void;
+  page: number;
+  total: number;
+  totalPages: number;
 }) {
   const messages = getMessages(locale);
 
@@ -458,107 +524,120 @@ function CategorySection({
       <CardContent className="space-y-4">
         <ActionFeedback state={disableState} />
         {categories.length > 0 ? (
-          <div className="overflow-hidden border border-border/70 bg-[#fcfaf5] dark:border-white/10 dark:bg-white/8">
-            <Table>
-              <TableHeader className="bg-white/70 dark:bg-white/6 [&_tr]:border-border/60 dark:[&_tr]:border-white/10">
-                <TableRow className="hover:bg-transparent">
-                  <TableHead>{messages.taxonomy.form.nameLabel}</TableHead>
-                  <TableHead>{messages.taxonomy.form.slugLabel}</TableHead>
-                  <TableHead>{messages.taxonomy.form.colorLabel}</TableHead>
-                  <TableHead>{messages.taxonomy.form.sortOrderLabel}</TableHead>
-                  <TableHead className="w-[10rem] text-right" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {categories.map((category) => (
-                  <TableRow
-                    key={category.id}
-                    className="border-border/60 dark:border-white/10"
-                  >
-                    <TableCell className="py-3 align-top whitespace-normal">
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium text-foreground">
-                            {category.name}
-                          </span>
-                          <Badge
-                            className={cn(
-                              "rounded-full",
-                              getStatusBadgeClassName(category.isActive),
-                            )}
-                          >
-                            {category.isActive
-                              ? messages.taxonomy.statusActive
-                              : messages.taxonomy.statusInactive}
-                          </Badge>
-                          <Badge className="rounded-full bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-white/80">
-                            {category.isSystem
-                              ? messages.taxonomy.systemBadge
-                              : messages.taxonomy.customBadge}
-                          </Badge>
-                        </div>
-                        <p className="max-w-md text-xs leading-5 text-muted-foreground">
-                          {category.description ??
-                            messages.taxonomy.noCategoryDescription}
-                        </p>
-                      </div>
-                    </TableCell>
-                    <TableCell className="py-3 text-muted-foreground">
-                      /{category.slug}
-                    </TableCell>
-                    <TableCell className="py-3 whitespace-normal">
-                      {renderColorToken(
-                        category.color,
-                        messages.taxonomy.noColor,
-                      )}
-                    </TableCell>
-                    <TableCell className="py-3 text-foreground">
-                      {category.sortOrder}
-                    </TableCell>
-                    <TableCell className="py-3">
-                      {!category.isSystem ? (
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            className="h-9 rounded-full px-4"
-                            onClick={() => onEdit(category.id)}
-                            type="button"
-                            variant="outline"
-                          >
-                            {messages.taxonomy.edit}
-                          </Button>
-                          {category.isActive ? (
-                            <form action={formAction}>
-                              <input
-                                name="categoryId"
-                                type="hidden"
-                                value={category.id}
-                              />
-                              <Button
-                                className="h-9 rounded-full px-4"
-                                disabled={isPending}
-                                onClick={(event) => {
-                                  if (
-                                    !window.confirm(
-                                      messages.taxonomy.disableCategoryConfirm,
-                                    )
-                                  ) {
-                                    event.preventDefault();
-                                  }
-                                }}
-                                type="submit"
-                                variant="outline"
-                              >
-                                {messages.taxonomy.disable}
-                              </Button>
-                            </form>
-                          ) : null}
-                        </div>
-                      ) : null}
-                    </TableCell>
+          <div className="space-y-4">
+            <div className="overflow-hidden border border-border/70 bg-[#fcfaf5] dark:border-white/10 dark:bg-white/8">
+              <Table>
+                <TableHeader className="bg-white/70 dark:bg-white/6 [&_tr]:border-border/60 dark:[&_tr]:border-white/10">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>{messages.taxonomy.form.nameLabel}</TableHead>
+                    <TableHead>{messages.taxonomy.form.slugLabel}</TableHead>
+                    <TableHead>{messages.taxonomy.form.colorLabel}</TableHead>
+                    <TableHead>
+                      {messages.taxonomy.form.sortOrderLabel}
+                    </TableHead>
+                    <TableHead className="w-[10rem] text-right" />
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {categories.map((category) => (
+                    <TableRow
+                      key={category.id}
+                      className="border-border/60 dark:border-white/10"
+                    >
+                      <TableCell className="py-3 align-top whitespace-normal">
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium text-foreground">
+                              {category.name}
+                            </span>
+                            <Badge
+                              className={cn(
+                                "rounded-full",
+                                getStatusBadgeClassName(category.isActive),
+                              )}
+                            >
+                              {category.isActive
+                                ? messages.taxonomy.statusActive
+                                : messages.taxonomy.statusInactive}
+                            </Badge>
+                            <Badge className="rounded-full bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-white/80">
+                              {category.isSystem
+                                ? messages.taxonomy.systemBadge
+                                : messages.taxonomy.customBadge}
+                            </Badge>
+                          </div>
+                          <p className="max-w-md text-xs leading-5 text-muted-foreground">
+                            {category.description ??
+                              messages.taxonomy.noCategoryDescription}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-3 text-muted-foreground">
+                        /{category.slug}
+                      </TableCell>
+                      <TableCell className="py-3 whitespace-normal">
+                        {renderColorToken(
+                          category.color,
+                          messages.taxonomy.noColor,
+                        )}
+                      </TableCell>
+                      <TableCell className="py-3 text-foreground">
+                        {category.sortOrder}
+                      </TableCell>
+                      <TableCell className="py-3">
+                        {!category.isSystem ? (
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              className="h-9 rounded-full px-4"
+                              onClick={() => onEdit(category.id)}
+                              type="button"
+                              variant="outline"
+                            >
+                              {messages.taxonomy.edit}
+                            </Button>
+                            {category.isActive ? (
+                              <form action={formAction}>
+                                <input
+                                  name="categoryId"
+                                  type="hidden"
+                                  value={category.id}
+                                />
+                                <Button
+                                  className="h-9 rounded-full px-4"
+                                  disabled={isPending}
+                                  onClick={(event) => {
+                                    if (
+                                      !window.confirm(
+                                        messages.taxonomy
+                                          .disableCategoryConfirm,
+                                      )
+                                    ) {
+                                      event.preventDefault();
+                                    }
+                                  }}
+                                  type="submit"
+                                  variant="outline"
+                                >
+                                  {messages.taxonomy.disable}
+                                </Button>
+                              </form>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <SectionPaginationFooter
+              locale={locale}
+              onNextPage={onNextPage}
+              onPreviousPage={onPreviousPage}
+              page={page}
+              total={total}
+              totalPages={totalPages}
+            />
           </div>
         ) : (
           <EmptyState
@@ -578,7 +657,12 @@ function TagSection({
   locale,
   onCreate,
   onEdit,
+  onNextPage,
+  onPreviousPage,
+  page,
   tags,
+  total,
+  totalPages,
 }: {
   disableState: TaxonomyActionState;
   formAction: (payload: FormData) => void;
@@ -586,7 +670,12 @@ function TagSection({
   locale: Locale;
   onCreate: () => void;
   onEdit: (tagId: string) => void;
+  onNextPage: () => void;
+  onPreviousPage: () => void;
+  page: number;
   tags: TagRecord[];
+  total: number;
+  totalPages: number;
 }) {
   const messages = getMessages(locale);
 
@@ -614,96 +703,106 @@ function TagSection({
       <CardContent className="space-y-4">
         <ActionFeedback state={disableState} />
         {tags.length > 0 ? (
-          <div className="overflow-hidden border border-border/70 bg-[#fcfaf5] dark:border-white/10 dark:bg-white/8">
-            <Table>
-              <TableHeader className="bg-white/70 dark:bg-white/6 [&_tr]:border-border/60 dark:[&_tr]:border-white/10">
-                <TableRow className="hover:bg-transparent">
-                  <TableHead>{messages.taxonomy.form.nameLabel}</TableHead>
-                  <TableHead>{messages.taxonomy.form.slugLabel}</TableHead>
-                  <TableHead>{messages.taxonomy.form.colorLabel}</TableHead>
-                  <TableHead className="w-[10rem] text-right" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {tags.map((tag) => (
-                  <TableRow
-                    key={tag.id}
-                    className="border-border/60 dark:border-white/10"
-                  >
-                    <TableCell className="py-3">
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium text-foreground">
-                            {tag.name}
-                          </span>
-                          <Badge
-                            className={cn(
-                              "rounded-full",
-                              getStatusBadgeClassName(tag.isActive),
-                            )}
-                          >
-                            {tag.isActive
-                              ? messages.taxonomy.statusActive
-                              : messages.taxonomy.statusInactive}
-                          </Badge>
-                          <Badge className="rounded-full bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-white/80">
-                            {tag.isSystem
-                              ? messages.taxonomy.systemBadge
-                              : messages.taxonomy.customBadge}
-                          </Badge>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="py-3 text-muted-foreground">
-                      /{tag.slug}
-                    </TableCell>
-                    <TableCell className="py-3">
-                      {renderColorToken(tag.color, messages.taxonomy.noColor)}
-                    </TableCell>
-                    <TableCell className="py-3">
-                      {!tag.isSystem ? (
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            className="h-9 rounded-full px-4"
-                            onClick={() => onEdit(tag.id)}
-                            type="button"
-                            variant="outline"
-                          >
-                            {messages.taxonomy.edit}
-                          </Button>
-                          {tag.isActive ? (
-                            <form action={formAction}>
-                              <input
-                                name="tagId"
-                                type="hidden"
-                                value={tag.id}
-                              />
-                              <Button
-                                className="h-9 rounded-full px-4"
-                                disabled={isPending}
-                                onClick={(event) => {
-                                  if (
-                                    !window.confirm(
-                                      messages.taxonomy.disableTagConfirm,
-                                    )
-                                  ) {
-                                    event.preventDefault();
-                                  }
-                                }}
-                                type="submit"
-                                variant="outline"
-                              >
-                                {messages.taxonomy.disable}
-                              </Button>
-                            </form>
-                          ) : null}
-                        </div>
-                      ) : null}
-                    </TableCell>
+          <div className="space-y-4">
+            <div className="overflow-hidden border border-border/70 bg-[#fcfaf5] dark:border-white/10 dark:bg-white/8">
+              <Table>
+                <TableHeader className="bg-white/70 dark:bg-white/6 [&_tr]:border-border/60 dark:[&_tr]:border-white/10">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>{messages.taxonomy.form.nameLabel}</TableHead>
+                    <TableHead>{messages.taxonomy.form.slugLabel}</TableHead>
+                    <TableHead>{messages.taxonomy.form.colorLabel}</TableHead>
+                    <TableHead className="w-[10rem] text-right" />
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {tags.map((tag) => (
+                    <TableRow
+                      key={tag.id}
+                      className="border-border/60 dark:border-white/10"
+                    >
+                      <TableCell className="py-3">
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium text-foreground">
+                              {tag.name}
+                            </span>
+                            <Badge
+                              className={cn(
+                                "rounded-full",
+                                getStatusBadgeClassName(tag.isActive),
+                              )}
+                            >
+                              {tag.isActive
+                                ? messages.taxonomy.statusActive
+                                : messages.taxonomy.statusInactive}
+                            </Badge>
+                            <Badge className="rounded-full bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-white/80">
+                              {tag.isSystem
+                                ? messages.taxonomy.systemBadge
+                                : messages.taxonomy.customBadge}
+                            </Badge>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-3 text-muted-foreground">
+                        /{tag.slug}
+                      </TableCell>
+                      <TableCell className="py-3">
+                        {renderColorToken(tag.color, messages.taxonomy.noColor)}
+                      </TableCell>
+                      <TableCell className="py-3">
+                        {!tag.isSystem ? (
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              className="h-9 rounded-full px-4"
+                              onClick={() => onEdit(tag.id)}
+                              type="button"
+                              variant="outline"
+                            >
+                              {messages.taxonomy.edit}
+                            </Button>
+                            {tag.isActive ? (
+                              <form action={formAction}>
+                                <input
+                                  name="tagId"
+                                  type="hidden"
+                                  value={tag.id}
+                                />
+                                <Button
+                                  className="h-9 rounded-full px-4"
+                                  disabled={isPending}
+                                  onClick={(event) => {
+                                    if (
+                                      !window.confirm(
+                                        messages.taxonomy.disableTagConfirm,
+                                      )
+                                    ) {
+                                      event.preventDefault();
+                                    }
+                                  }}
+                                  type="submit"
+                                  variant="outline"
+                                >
+                                  {messages.taxonomy.disable}
+                                </Button>
+                              </form>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <SectionPaginationFooter
+              locale={locale}
+              onNextPage={onNextPage}
+              onPreviousPage={onPreviousPage}
+              page={page}
+              total={total}
+              totalPages={totalPages}
+            />
           </div>
         ) : (
           <EmptyState
@@ -724,8 +823,10 @@ export function TaxonomyConsole({
 }: TaxonomyConsoleProps) {
   const messages = getMessages(locale);
   const [dialogState, setDialogState] = useState<TaxonomyDialogState>(null);
+  const [categoryPage, setCategoryPage] = useState(1);
   const [categoryDisableState, categoryDisableFormAction, isCategoryDisabling] =
     useActionState(disableCategoryServerAction, initialActionState);
+  const [tagPage, setTagPage] = useState(1);
   const [tagDisableState, tagDisableFormAction, isTagDisabling] =
     useActionState(disableTagServerAction, initialActionState);
 
@@ -733,8 +834,32 @@ export function TaxonomyConsole({
   const activeCategories = categories.filter(
     (category) => category.isActive,
   ).length;
+  const categoryTotalPages = Math.max(
+    1,
+    Math.ceil(categories.length / TAXONOMY_PAGE_SIZE),
+  );
   const totalTags = tags.length;
+  const tagTotalPages = Math.max(
+    1,
+    Math.ceil(tags.length / TAXONOMY_PAGE_SIZE),
+  );
   const activeTags = tags.filter((tag) => tag.isActive).length;
+  const paginatedCategories = categories.slice(
+    (categoryPage - 1) * TAXONOMY_PAGE_SIZE,
+    categoryPage * TAXONOMY_PAGE_SIZE,
+  );
+  const paginatedTags = tags.slice(
+    (tagPage - 1) * TAXONOMY_PAGE_SIZE,
+    tagPage * TAXONOMY_PAGE_SIZE,
+  );
+
+  useEffect(() => {
+    setCategoryPage((currentPage) => Math.min(currentPage, categoryTotalPages));
+  }, [categoryTotalPages]);
+
+  useEffect(() => {
+    setTagPage((currentPage) => Math.min(currentPage, tagTotalPages));
+  }, [tagTotalPages]);
 
   return (
     <div className="space-y-8">
@@ -770,28 +895,50 @@ export function TaxonomyConsole({
 
       <section className="space-y-6">
         <CategorySection
-          categories={categories}
+          categories={paginatedCategories}
           disableState={categoryDisableState}
           formAction={categoryDisableFormAction}
           isPending={isCategoryDisabling}
           locale={locale}
+          onNextPage={() =>
+            setCategoryPage((currentPage) =>
+              Math.min(categoryTotalPages, currentPage + 1),
+            )
+          }
+          onPreviousPage={() =>
+            setCategoryPage((currentPage) => Math.max(1, currentPage - 1))
+          }
           onCreate={() =>
             setDialogState({ entity: "category", mode: "create" })
           }
           onEdit={(categoryId) =>
             setDialogState({ categoryId, entity: "category", mode: "edit" })
           }
+          page={categoryPage}
+          total={categories.length}
+          totalPages={categoryTotalPages}
         />
         <TagSection
           disableState={tagDisableState}
           formAction={tagDisableFormAction}
           isPending={isTagDisabling}
           locale={locale}
+          onNextPage={() =>
+            setTagPage((currentPage) =>
+              Math.min(tagTotalPages, currentPage + 1),
+            )
+          }
+          onPreviousPage={() =>
+            setTagPage((currentPage) => Math.max(1, currentPage - 1))
+          }
           onCreate={() => setDialogState({ entity: "tag", mode: "create" })}
           onEdit={(tagId) =>
             setDialogState({ entity: "tag", mode: "edit", tagId })
           }
-          tags={tags}
+          page={tagPage}
+          tags={paginatedTags}
+          total={tags.length}
+          totalPages={tagTotalPages}
         />
       </section>
 
