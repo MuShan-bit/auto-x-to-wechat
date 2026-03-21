@@ -17,6 +17,7 @@ type Messages = {
       dashboard: string;
       bindings: string;
       strategies: string;
+      ai: string;
       taxonomy: string;
       archives: string;
       runs: string;
@@ -399,6 +400,72 @@ type Messages = {
       colorPlaceholder: string;
     };
   };
+  ai: {
+    eyebrow: string;
+    title: string;
+    description: string;
+    badge: string;
+    errorTitle: string;
+    errorDescription: string;
+    summary: {
+      providerCount: string;
+      enabledProviders: string;
+      modelCount: string;
+      defaultTasks: string;
+    };
+    providersTitle: string;
+    providersDescription: string;
+    createProvider: string;
+    editProvider: string;
+    createProviderDescription: string;
+    editProviderDescription: string;
+    saveProvider: string;
+    createModel: string;
+    editModel: string;
+    createModelDescription: string;
+    editModelDescription: string;
+    saveModel: string;
+    testingProvider: string;
+    testProvider: string;
+    testWithDefaultModel: string;
+    setAsDefault: string;
+    defaultBadge: string;
+    enabledBadge: string;
+    disabledBadge: string;
+    noBaseUrl: string;
+    noParameters: string;
+    providersEmptyTitle: string;
+    providersEmptyDescription: string;
+    modelsTitle: string;
+    modelsDescription: string;
+    modelsEmptyTitle: string;
+    modelsEmptyDescription: string;
+    providerTypeLabel: string;
+    baseUrlLabel: string;
+    apiKeyLabel: string;
+    apiKeyHint: string;
+    providerNameLabel: string;
+    modelCodeLabel: string;
+    modelDisplayNameLabel: string;
+    taskTypeLabel: string;
+    parametersLabel: string;
+    parametersHint: string;
+    enabledLabel: string;
+    defaultLabel: string;
+    hasApiKey: string;
+    missingApiKey: string;
+    modelCountLabel: string;
+    edit: string;
+    form: {
+      providerNamePlaceholder: string;
+      baseUrlPlaceholder: string;
+      apiKeyPlaceholder: string;
+      modelCodePlaceholder: string;
+      modelDisplayNamePlaceholder: string;
+      parametersPlaceholder: string;
+      providerSelectPlaceholder: string;
+    };
+  };
   archives: {
     eyebrow: string;
     title: string;
@@ -568,6 +635,14 @@ type Messages = {
     actionType: Record<"CREATED" | "SKIPPED" | "FAILED", string>;
     relationType: Record<"QUOTE" | "REPOST" | "REPLY", string>;
     taxonomySource: Record<"MANUAL" | "AI" | "RULE", string>;
+    aiProviderType: Record<
+      "OPENAI" | "ANTHROPIC" | "GEMINI" | "OPENAI_COMPATIBLE",
+      string
+    >;
+    aiTaskType: Record<
+      "POST_CLASSIFY" | "REPORT_SUMMARY" | "DRAFT_REWRITE",
+      string
+    >;
   };
   actions: {
     login: {
@@ -630,6 +705,27 @@ type Messages = {
       tagUpdated: string;
       tagDisabled: string;
     };
+    ai: {
+      missingProviderId: string;
+      missingProviderName: string;
+      missingProviderType: string;
+      missingApiKey: string;
+      missingModelId: string;
+      missingProviderConfigId: string;
+      missingModelCode: string;
+      missingDisplayName: string;
+      missingTaskType: string;
+      invalidParametersJson: string;
+      defaultModelRequiresEnabled: string;
+      providerValidationFailed: string;
+      providerCreated: string;
+      providerUpdated: string;
+      modelValidationFailed: string;
+      modelCreated: string;
+      modelUpdated: string;
+      modelDefaultUpdated: string;
+      providerTested: string;
+    };
     api: {
       unauthorized: string;
       requestFailed: string;
@@ -669,6 +765,7 @@ const messages: Record<Locale, Messages> = {
         dashboard: "仪表盘",
         bindings: "绑定",
         strategies: "策略",
+        ai: "AI 模型",
         taxonomy: "分类标签",
         archives: "归档",
         runs: "运行记录",
@@ -1121,6 +1218,83 @@ const messages: Record<Locale, Messages> = {
         colorPlaceholder: "例如 #2563eb",
       },
     },
+    ai: {
+      eyebrow: "AI 设置",
+      title: "AI 模型",
+      description:
+        "统一管理 AI 提供商密钥、模型参数与任务默认模型，为后续自动分类、报告生成和内容改写提供运行时基础。",
+      badge: "{count} 个模型配置",
+      errorTitle: "AI 模型页面暂时不可用",
+      errorDescription: "AI 提供商或模型数据加载失败，请稍后重试。",
+      summary: {
+        providerCount: "提供商数量",
+        enabledProviders: "已启用提供商",
+        modelCount: "模型数量",
+        defaultTasks: "默认任务模型",
+      },
+      providersTitle: "提供商配置",
+      providersDescription:
+        "维护 API Key、Base URL 和提供商类型。测试连接会优先使用该提供商下的默认模型或首个模型。",
+      createProvider: "新建提供商",
+      editProvider: "编辑提供商",
+      createProviderDescription:
+        "新增一个可被 AI 网关调用的提供商配置。密钥会在后端加密存储。",
+      editProviderDescription:
+        "更新提供商名称、Base URL、密钥或启用状态。留空 API Key 时保留原值。",
+      saveProvider: "保存提供商",
+      createModel: "新建模型",
+      editModel: "编辑模型",
+      createModelDescription:
+        "为指定任务添加模型编码、显示名、默认参数与默认任务模型设置。",
+      editModelDescription:
+        "更新模型编码、任务类型、默认参数与启用状态，或切换默认模型。",
+      saveModel: "保存模型",
+      testingProvider: "测试中...",
+      testProvider: "测试连接",
+      testWithDefaultModel: "使用默认 / 首个模型测试",
+      setAsDefault: "设为默认",
+      defaultBadge: "默认",
+      enabledBadge: "已启用",
+      disabledBadge: "已停用",
+      noBaseUrl: "使用提供商默认地址",
+      noParameters: "未配置默认参数",
+      providersEmptyTitle: "还没有 AI 提供商",
+      providersEmptyDescription:
+        "先创建一个提供商，再为分类、报告等任务配置可选模型。",
+      modelsTitle: "模型配置",
+      modelsDescription:
+        "按任务维度维护模型池，并为帖子分类、报告生成、草稿改写指定默认模型。",
+      modelsEmptyTitle: "还没有模型配置",
+      modelsEmptyDescription:
+        "先添加一个提供商，然后创建模型并设置默认任务模型。",
+      providerTypeLabel: "提供商类型",
+      baseUrlLabel: "Base URL",
+      apiKeyLabel: "API Key",
+      apiKeyHint: "编辑提供商时留空表示沿用当前密钥。",
+      providerNameLabel: "提供商名称",
+      modelCodeLabel: "模型编码",
+      modelDisplayNameLabel: "显示名称",
+      taskTypeLabel: "任务类型",
+      parametersLabel: "默认参数 JSON",
+      parametersHint:
+        '输入一个 JSON 对象，例如 `{ "temperature": 0.2, "max_tokens": 1024 }`。',
+      enabledLabel: "启用",
+      defaultLabel: "默认任务模型",
+      hasApiKey: "已保存密钥",
+      missingApiKey: "未保存密钥",
+      modelCountLabel: "{count} 个模型",
+      edit: "编辑",
+      form: {
+        providerNamePlaceholder: "例如 OpenAI Production",
+        baseUrlPlaceholder: "例如 https://openrouter.ai/api/v1",
+        apiKeyPlaceholder: "输入 API Key",
+        modelCodePlaceholder: "例如 gpt-5.2 或 claude-3-7-sonnet-latest",
+        modelDisplayNamePlaceholder: "例如 GPT-5.2 分类模型",
+        parametersPlaceholder:
+          '{\n  "temperature": 0.2,\n  "max_tokens": 1024\n}',
+        providerSelectPlaceholder: "请选择提供商",
+      },
+    },
     archives: {
       eyebrow: "归档",
       title: "归档",
@@ -1334,6 +1508,17 @@ const messages: Record<Locale, Messages> = {
         AI: "AI",
         RULE: "规则",
       },
+      aiProviderType: {
+        OPENAI: "OpenAI",
+        ANTHROPIC: "Anthropic",
+        GEMINI: "Gemini",
+        OPENAI_COMPATIBLE: "OpenAI Compatible",
+      },
+      aiTaskType: {
+        POST_CLASSIFY: "帖子分类",
+        REPORT_SUMMARY: "报告总结",
+        DRAFT_REWRITE: "草稿改写",
+      },
     },
     actions: {
       login: {
@@ -1399,6 +1584,27 @@ const messages: Record<Locale, Messages> = {
         tagUpdated: "标签已更新。",
         tagDisabled: "标签已停用。",
       },
+      ai: {
+        missingProviderId: "缺少提供商 ID。",
+        missingProviderName: "请填写提供商名称。",
+        missingProviderType: "请选择提供商类型。",
+        missingApiKey: "请填写 API Key。",
+        missingModelId: "缺少模型 ID。",
+        missingProviderConfigId: "请选择所属提供商。",
+        missingModelCode: "请填写模型编码。",
+        missingDisplayName: "请填写模型显示名。",
+        missingTaskType: "请选择任务类型。",
+        invalidParametersJson: "默认参数必须是合法的 JSON 对象。",
+        defaultModelRequiresEnabled: "默认模型必须保持启用状态。",
+        providerValidationFailed: "AI 提供商表单校验失败。",
+        providerCreated: "AI 提供商已创建。",
+        providerUpdated: "AI 提供商已更新。",
+        modelValidationFailed: "AI 模型表单校验失败。",
+        modelCreated: "AI 模型已创建。",
+        modelUpdated: "AI 模型已更新。",
+        modelDefaultUpdated: "默认任务模型已切换。",
+        providerTested: "连接测试成功，模型 {model} 返回：{text}",
+      },
       api: {
         unauthorized: "未登录或会话已失效。",
         requestFailed: "请求失败，请稍后重试。",
@@ -1418,6 +1624,7 @@ const messages: Record<Locale, Messages> = {
         dashboard: "Dashboard",
         bindings: "Bindings",
         strategies: "Strategies",
+        ai: "AI Models",
         taxonomy: "Taxonomy",
         archives: "Archives",
         runs: "Runs",
@@ -1889,6 +2096,84 @@ const messages: Record<Locale, Messages> = {
         colorPlaceholder: "For example #2563eb",
       },
     },
+    ai: {
+      eyebrow: "AI Settings",
+      title: "AI models",
+      description:
+        "Manage AI providers, model parameters, and task-level defaults in one place so classification, reports, and draft rewriting can share the same runtime foundation.",
+      badge: "{count} model configs",
+      errorTitle: "AI settings are temporarily unavailable",
+      errorDescription:
+        "Failed to load AI provider or model data. Please try again later.",
+      summary: {
+        providerCount: "Providers",
+        enabledProviders: "Enabled providers",
+        modelCount: "Models",
+        defaultTasks: "Task defaults",
+      },
+      providersTitle: "Provider configs",
+      providersDescription:
+        "Store API keys, Base URLs, and provider types. Connectivity tests use the provider's default model or first available model.",
+      createProvider: "New provider",
+      editProvider: "Edit provider",
+      createProviderDescription:
+        "Add a provider that can be called by the AI gateway. Secrets are encrypted on the backend.",
+      editProviderDescription:
+        "Update the provider name, Base URL, API key, or enabled state. Leave API key blank to keep the current value.",
+      saveProvider: "Save provider",
+      createModel: "New model",
+      editModel: "Edit model",
+      createModelDescription:
+        "Add a model code, display name, default parameters, and task default selection.",
+      editModelDescription:
+        "Update the model code, task type, default parameters, enabled state, or switch the task default.",
+      saveModel: "Save model",
+      testingProvider: "Testing...",
+      testProvider: "Test connection",
+      testWithDefaultModel: "Test with default / first model",
+      setAsDefault: "Set default",
+      defaultBadge: "Default",
+      enabledBadge: "Enabled",
+      disabledBadge: "Disabled",
+      noBaseUrl: "Use provider default endpoint",
+      noParameters: "No default parameters",
+      providersEmptyTitle: "No AI providers yet",
+      providersEmptyDescription:
+        "Create a provider first, then configure models for classification, reports, and rewriting.",
+      modelsTitle: "Model configs",
+      modelsDescription:
+        "Maintain task-specific model pools and choose defaults for post classification, report summarization, and draft rewriting.",
+      modelsEmptyTitle: "No model configs yet",
+      modelsEmptyDescription:
+        "Add a provider first, then create models and assign task defaults.",
+      providerTypeLabel: "Provider type",
+      baseUrlLabel: "Base URL",
+      apiKeyLabel: "API key",
+      apiKeyHint: "Leave blank during editing to keep the current key.",
+      providerNameLabel: "Provider name",
+      modelCodeLabel: "Model code",
+      modelDisplayNameLabel: "Display name",
+      taskTypeLabel: "Task type",
+      parametersLabel: "Default parameters JSON",
+      parametersHint:
+        'Provide a JSON object such as `{ "temperature": 0.2, "max_tokens": 1024 }`.',
+      enabledLabel: "Enabled",
+      defaultLabel: "Default task model",
+      hasApiKey: "Secret saved",
+      missingApiKey: "No secret saved",
+      modelCountLabel: "{count} models",
+      edit: "Edit",
+      form: {
+        providerNamePlaceholder: "For example OpenAI Production",
+        baseUrlPlaceholder: "For example https://openrouter.ai/api/v1",
+        apiKeyPlaceholder: "Enter API key",
+        modelCodePlaceholder: "For example gpt-5.2 or claude-3-7-sonnet-latest",
+        modelDisplayNamePlaceholder: "For example GPT-5.2 classifier",
+        parametersPlaceholder:
+          '{\n  "temperature": 0.2,\n  "max_tokens": 1024\n}',
+        providerSelectPlaceholder: "Select a provider",
+      },
+    },
     archives: {
       eyebrow: "Archive",
       title: "Archives",
@@ -2104,6 +2389,17 @@ const messages: Record<Locale, Messages> = {
         AI: "AI",
         RULE: "Rule",
       },
+      aiProviderType: {
+        OPENAI: "OpenAI",
+        ANTHROPIC: "Anthropic",
+        GEMINI: "Gemini",
+        OPENAI_COMPATIBLE: "OpenAI Compatible",
+      },
+      aiTaskType: {
+        POST_CLASSIFY: "Post classification",
+        REPORT_SUMMARY: "Report summary",
+        DRAFT_REWRITE: "Draft rewrite",
+      },
     },
     actions: {
       login: {
@@ -2171,6 +2467,29 @@ const messages: Record<Locale, Messages> = {
         tagCreated: "Tag created.",
         tagUpdated: "Tag updated.",
         tagDisabled: "Tag disabled.",
+      },
+      ai: {
+        missingProviderId: "Missing provider ID.",
+        missingProviderName: "Please enter the provider name.",
+        missingProviderType: "Please select a provider type.",
+        missingApiKey: "Please enter the API key.",
+        missingModelId: "Missing model ID.",
+        missingProviderConfigId: "Please select a provider.",
+        missingModelCode: "Please enter the model code.",
+        missingDisplayName: "Please enter the model display name.",
+        missingTaskType: "Please select a task type.",
+        invalidParametersJson:
+          "Default parameters must be a valid JSON object.",
+        defaultModelRequiresEnabled: "A default model must remain enabled.",
+        providerValidationFailed: "AI provider form validation failed.",
+        providerCreated: "AI provider created.",
+        providerUpdated: "AI provider updated.",
+        modelValidationFailed: "AI model form validation failed.",
+        modelCreated: "AI model created.",
+        modelUpdated: "AI model updated.",
+        modelDefaultUpdated: "Default task model updated.",
+        providerTested:
+          "Connection test succeeded. Model {model} replied with: {text}",
       },
       api: {
         unauthorized: "Not signed in or the session has expired.",

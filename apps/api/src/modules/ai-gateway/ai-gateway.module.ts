@@ -4,12 +4,14 @@ import { CryptoModule } from '../crypto/crypto.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AnthropicAdapter } from './adapters/anthropic.adapter';
 import { GeminiAdapter } from './adapters/gemini.adapter';
+import { AiGatewayController } from './ai-gateway.controller';
 import { OpenAiCompatibleAdapter } from './adapters/openai-compatible.adapter';
 import { AiGatewayService } from './ai-gateway.service';
 import { AI_PROVIDER_ADAPTERS } from './ai-gateway.types';
 
 @Module({
   imports: [PrismaModule, CryptoModule, AiConfigModule],
+  controllers: [AiGatewayController],
   providers: [
     AnthropicAdapter,
     GeminiAdapter,

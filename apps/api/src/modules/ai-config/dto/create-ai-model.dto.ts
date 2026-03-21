@@ -38,7 +38,11 @@ export class CreateAiModelDto {
   enabled?: boolean;
 
   @IsOptional()
+  @Transform(({ value }) => toOptionalBoolean(value))
+  @IsBoolean()
+  isDefault?: boolean;
+
+  @IsOptional()
   @IsObject()
   parametersJson?: Record<string, unknown> | null;
 }
-

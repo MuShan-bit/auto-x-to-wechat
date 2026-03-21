@@ -37,6 +37,7 @@ function createModelRecord(
     modelCode: 'gpt-5.2',
     displayName: 'GPT-5.2 classify',
     taskType: AITaskType.POST_CLASSIFY,
+    isDefault: false,
     enabled: true,
     parametersJson: {
       temperature: 0.2,
@@ -51,6 +52,7 @@ describe('AiConfigService', () => {
   let service: AiConfigService;
   let credentialCryptoService: CredentialCryptoService;
   let prisma: {
+    $transaction: jest.Mock;
     aIProviderConfig: {
       create: jest.Mock;
       findFirst: jest.Mock;
@@ -64,6 +66,7 @@ describe('AiConfigService', () => {
       findMany: jest.Mock;
       findUniqueOrThrow: jest.Mock;
       update: jest.Mock;
+      updateMany: jest.Mock;
     };
   };
 
@@ -73,6 +76,9 @@ describe('AiConfigService', () => {
     } as unknown as ConfigService);
 
     prisma = {
+      $transaction: jest.fn(async (callback: (tx: unknown) => unknown) =>
+        callback(prisma),
+      ),
       aIProviderConfig: {
         create: jest.fn(),
         findFirst: jest.fn(),
@@ -86,6 +92,7 @@ describe('AiConfigService', () => {
         findMany: jest.fn(),
         findUniqueOrThrow: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
       },
     };
 
@@ -114,6 +121,7 @@ describe('AiConfigService', () => {
       models: [],
     });
     prisma.aIProviderConfig.findFirst.mockResolvedValue(createdProvider);
+    prisma.aIModelConfig.findMany.mockResolvedValue([]);
     prisma.aIProviderConfig.update.mockResolvedValue({
       ...updatedProvider,
       models: [],
@@ -231,8 +239,38 @@ describe('AiConfigService', () => {
       .mockResolvedValueOnce(null);
     prisma.aIModelConfig.create.mockResolvedValue(createdModel);
     prisma.aIModelConfig.findFirst.mockResolvedValue(existingModel);
+    prisma.aIModelConfig.findMany
+      .mockResolvedValueOnce([
+        {
+          id: createdModel.id,
+          isDefault: false,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: updatedModel.id,
+          isDefault: false,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          ...updatedModel,
+          isDefault: false,
+        },
+      ]);
+    prisma.aIModelConfig.updateMany.mockResolvedValue({
+      count: 1,
+    });
+    prisma.aIModelConfig.findUniqueOrThrow
+      .mockResolvedValueOnce({
+        ...createdModel,
+        isDefault: true,
+      })
+      .mockResolvedValueOnce({
+        ...updatedModel,
+        isDefault: false,
+      });
     prisma.aIModelConfig.update.mockResolvedValue(updatedModel);
-    prisma.aIModelConfig.findMany.mockResolvedValue([updatedModel]);
 
     const model = await service.createModel('ai_owner', {
       providerConfigId: provider.id,
@@ -240,12 +278,14 @@ describe('AiConfigService', () => {
       displayName: 'GPT-5.2 classify',
       taskType: AITaskType.POST_CLASSIFY,
       enabled: true,
+      isDefault: true,
       parametersJson: {
         temperature: 0.2,
       },
     });
 
     expect(model.provider.id).toBe(provider.id);
+    expect(model.isDefault).toBe(true);
     expect(model.parametersJson).toEqual({
       temperature: 0.2,
     });
@@ -267,6 +307,7 @@ describe('AiConfigService', () => {
 
     expect(result.provider.id).toBe(backupProvider.id);
     expect(result.enabled).toBe(false);
+    expect(result.isDefault).toBe(false);
     expect(result.parametersJson).toEqual({
       temperature: 0.1,
       topK: 20,
@@ -302,5 +343,144 @@ describe('AiConfigService', () => {
         taskType: AITaskType.REPORT_SUMMARY,
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('keeps a single default model per task type and falls back when the default is disabled', async () => {
+    const provider = createProviderRecord(credentialCryptoService, {
+      id: 'provider-openai',
+    });
+    const primaryModel = {
+      ...createModelRecord({
+        id: 'model-primary',
+        providerConfigId: provider.id,
+        modelCode: 'gpt-5.2',
+        displayName: 'Primary Classifier',
+        isDefault: false,
+      }),
+      provider,
+    };
+    const secondaryModel = {
+      ...createModelRecord({
+        id: 'model-secondary',
+        providerConfigId: provider.id,
+        modelCode: 'gpt-4.1-mini',
+        displayName: 'Secondary Classifier',
+        createdAt: new Date('2026-03-21T00:10:00.000Z'),
+        updatedAt: new Date('2026-03-21T00:10:00.000Z'),
+        isDefault: false,
+      }),
+      provider,
+    };
+
+    prisma.aIProviderConfig.findFirst.mockResolvedValue(provider);
+    prisma.aIModelConfig.create.mockResolvedValue(primaryModel);
+    prisma.aIModelConfig.findMany
+      .mockResolvedValueOnce([
+        {
+          id: primaryModel.id,
+          isDefault: false,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: primaryModel.id,
+          isDefault: true,
+        },
+        {
+          id: secondaryModel.id,
+          isDefault: false,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: secondaryModel.id,
+          isDefault: false,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: secondaryModel.id,
+          isDefault: false,
+        },
+      ]);
+    prisma.aIModelConfig.findFirst
+      .mockResolvedValueOnce({
+        ...secondaryModel,
+        isDefault: false,
+      })
+      .mockResolvedValueOnce({
+        ...primaryModel,
+        isDefault: true,
+      });
+    prisma.aIModelConfig.findUniqueOrThrow
+      .mockResolvedValueOnce({
+        ...primaryModel,
+        isDefault: true,
+      })
+      .mockResolvedValueOnce({
+        ...secondaryModel,
+        isDefault: true,
+      })
+      .mockResolvedValueOnce({
+        ...primaryModel,
+        enabled: false,
+        isDefault: false,
+      });
+    prisma.aIModelConfig.update.mockResolvedValueOnce({
+      ...secondaryModel,
+      isDefault: true,
+    });
+    prisma.aIModelConfig.update.mockResolvedValueOnce({
+      ...primaryModel,
+      enabled: false,
+      isDefault: false,
+    });
+    prisma.aIModelConfig.updateMany.mockResolvedValue({
+      count: 1,
+    });
+
+    const created = await service.createModel('ai_owner', {
+      providerConfigId: provider.id,
+      modelCode: primaryModel.modelCode,
+      displayName: primaryModel.displayName,
+      taskType: primaryModel.taskType,
+      enabled: true,
+    });
+    expect(created.isDefault).toBe(true);
+
+    const switched = await service.updateModel('ai_owner', secondaryModel.id, {
+      isDefault: true,
+    });
+    expect(switched.isDefault).toBe(true);
+
+    const disabled = await service.updateModel('ai_owner', primaryModel.id, {
+      enabled: false,
+    });
+    expect(disabled.isDefault).toBe(false);
+
+    expect(prisma.aIModelConfig.updateMany).toHaveBeenCalledWith({
+      where: {
+        taskType: AITaskType.POST_CLASSIFY,
+        isDefault: true,
+        provider: {
+          userId: 'ai_owner',
+        },
+        id: {
+          not: secondaryModel.id,
+        },
+      },
+      data: {
+        isDefault: false,
+      },
+    });
+    expect(prisma.aIModelConfig.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: secondaryModel.id,
+        isDefault: false,
+      },
+      data: {
+        isDefault: true,
+      },
+    });
   });
 });

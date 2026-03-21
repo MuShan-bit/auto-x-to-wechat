@@ -36,6 +36,8 @@ type ModelWithProvider = AIModelConfig & {
   provider: AIProviderConfig;
 };
 
+type PrismaTransactionClient = Prisma.TransactionClient;
+
 @Injectable()
 export class AiConfigService {
   constructor(
@@ -49,7 +51,11 @@ export class AiConfigService {
       include: {
         models: {
           where: options.includeDisabled ? {} : { enabled: true },
-          orderBy: [{ taskType: 'asc' }, { createdAt: 'asc' }],
+          orderBy: [
+            { taskType: 'asc' },
+            { isDefault: 'desc' },
+            { createdAt: 'asc' },
+          ],
         },
       },
       orderBy: [{ createdAt: 'asc' }],
@@ -72,7 +78,11 @@ export class AiConfigService {
       },
       include: {
         models: {
-          orderBy: [{ taskType: 'asc' }, { createdAt: 'asc' }],
+          orderBy: [
+            { taskType: 'asc' },
+            { isDefault: 'desc' },
+            { createdAt: 'asc' },
+          ],
         },
       },
     });
@@ -88,7 +98,7 @@ export class AiConfigService {
     const provider = await this.findProviderOrThrow(userId, providerConfigId);
     const effectiveProviderType = dto.providerType ?? provider.providerType;
     const effectiveBaseUrl =
-      dto.baseUrl !== undefined ? dto.baseUrl ?? null : provider.baseUrl;
+      dto.baseUrl !== undefined ? (dto.baseUrl ?? null) : provider.baseUrl;
 
     this.assertProviderRequirements(effectiveProviderType, effectiveBaseUrl);
 
@@ -116,20 +126,43 @@ export class AiConfigService {
 
     const updatedProvider =
       Object.keys(data).length > 0
-        ? await this.prisma.aIProviderConfig.update({
-            where: { id: provider.id },
-            data,
-            include: {
-              models: {
-                orderBy: [{ taskType: 'asc' }, { createdAt: 'asc' }],
+        ? await this.prisma.$transaction(async (tx) => {
+            const updated = await tx.aIProviderConfig.update({
+              where: { id: provider.id },
+              data,
+              include: {
+                models: {
+                  orderBy: [
+                    { taskType: 'asc' },
+                    { isDefault: 'desc' },
+                    { createdAt: 'asc' },
+                  ],
+                },
               },
-            },
+            });
+
+            if (dto.enabled !== undefined) {
+              const taskTypes = await this.listProviderTaskTypes(
+                tx,
+                provider.id,
+              );
+
+              for (const taskType of taskTypes) {
+                await this.syncDefaultModel(tx, userId, taskType);
+              }
+            }
+
+            return updated;
           })
         : await this.prisma.aIProviderConfig.findUniqueOrThrow({
             where: { id: provider.id },
             include: {
               models: {
-                orderBy: [{ taskType: 'asc' }, { createdAt: 'asc' }],
+                orderBy: [
+                  { taskType: 'asc' },
+                  { isDefault: 'desc' },
+                  { createdAt: 'asc' },
+                ],
               },
             },
           });
@@ -143,7 +176,11 @@ export class AiConfigService {
       include: {
         provider: true,
       },
-      orderBy: [{ createdAt: 'asc' }],
+      orderBy: [
+        { taskType: 'asc' },
+        { isDefault: 'desc' },
+        { createdAt: 'asc' },
+      ],
     });
 
     return models.map((model) => this.serializeModel(model));
@@ -151,77 +188,131 @@ export class AiConfigService {
 
   async createModel(userId: string, dto: CreateAiModelDto) {
     await this.findProviderOrThrow(userId, dto.providerConfigId);
+    this.assertDefaultModelEnabled(dto.isDefault, dto.enabled ?? true);
 
-    const model = await this.prisma.aIModelConfig.create({
-      data: {
-        providerConfigId: dto.providerConfigId,
-        modelCode: dto.modelCode,
-        displayName: dto.displayName,
-        taskType: dto.taskType,
-        enabled: dto.enabled ?? true,
-        parametersJson: this.toParametersJsonInput(dto.parametersJson),
-      },
-      include: {
-        provider: true,
-      },
+    const model = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.aIModelConfig.create({
+        data: {
+          providerConfigId: dto.providerConfigId,
+          modelCode: dto.modelCode,
+          displayName: dto.displayName,
+          taskType: dto.taskType,
+          isDefault: dto.isDefault ?? false,
+          enabled: dto.enabled ?? true,
+          parametersJson: this.toParametersJsonInput(dto.parametersJson),
+        },
+        include: {
+          provider: true,
+        },
+      });
+
+      await this.syncDefaultModel(
+        tx,
+        userId,
+        dto.taskType,
+        created.enabled && dto.isDefault === true ? created.id : undefined,
+      );
+
+      return tx.aIModelConfig.findUniqueOrThrow({
+        where: { id: created.id },
+        include: {
+          provider: true,
+        },
+      });
     });
 
     return this.serializeModel(model);
   }
 
-  async updateModel(userId: string, modelConfigId: string, dto: UpdateAiModelDto) {
+  async updateModel(
+    userId: string,
+    modelConfigId: string,
+    dto: UpdateAiModelDto,
+  ) {
     const model = await this.findModelOrThrow(userId, modelConfigId);
     const targetProviderId = dto.providerConfigId ?? model.providerConfigId;
+    const targetTaskType = dto.taskType ?? model.taskType;
+    const targetEnabled = dto.enabled ?? model.enabled;
 
     if (targetProviderId !== model.providerConfigId) {
       await this.findProviderOrThrow(userId, targetProviderId);
     }
 
-    const data: Prisma.AIModelConfigUpdateInput = {};
+    this.assertDefaultModelEnabled(dto.isDefault, targetEnabled);
 
-    if (dto.providerConfigId !== undefined) {
-      data.provider = {
-        connect: {
-          id: dto.providerConfigId,
+    const updatedModel = await this.prisma.$transaction(async (tx) => {
+      const data: Prisma.AIModelConfigUpdateInput = {};
+
+      if (dto.providerConfigId !== undefined) {
+        data.provider = {
+          connect: {
+            id: dto.providerConfigId,
+          },
+        };
+      }
+
+      if (dto.modelCode !== undefined) {
+        data.modelCode = dto.modelCode;
+      }
+
+      if (dto.displayName !== undefined) {
+        data.displayName = dto.displayName;
+      }
+
+      if (dto.taskType !== undefined) {
+        data.taskType = dto.taskType;
+      }
+
+      if (dto.enabled !== undefined) {
+        data.enabled = dto.enabled;
+      }
+
+      if (dto.isDefault !== undefined) {
+        data.isDefault = dto.isDefault;
+      } else if (!targetEnabled || model.taskType !== targetTaskType) {
+        data.isDefault = false;
+      }
+
+      if (dto.parametersJson !== undefined) {
+        data.parametersJson = this.toParametersJsonInput(dto.parametersJson);
+      }
+
+      const updated =
+        Object.keys(data).length > 0
+          ? await tx.aIModelConfig.update({
+              where: { id: model.id },
+              data,
+              include: {
+                provider: true,
+              },
+            })
+          : await tx.aIModelConfig.findUniqueOrThrow({
+              where: { id: model.id },
+              include: {
+                provider: true,
+              },
+            });
+
+      const affectedTaskTypes = new Set([model.taskType, targetTaskType]);
+
+      for (const taskType of affectedTaskTypes) {
+        await this.syncDefaultModel(
+          tx,
+          userId,
+          taskType,
+          taskType === targetTaskType && updated.enabled && updated.isDefault
+            ? updated.id
+            : undefined,
+        );
+      }
+
+      return tx.aIModelConfig.findUniqueOrThrow({
+        where: { id: updated.id },
+        include: {
+          provider: true,
         },
-      };
-    }
-
-    if (dto.modelCode !== undefined) {
-      data.modelCode = dto.modelCode;
-    }
-
-    if (dto.displayName !== undefined) {
-      data.displayName = dto.displayName;
-    }
-
-    if (dto.taskType !== undefined) {
-      data.taskType = dto.taskType;
-    }
-
-    if (dto.enabled !== undefined) {
-      data.enabled = dto.enabled;
-    }
-
-    if (dto.parametersJson !== undefined) {
-      data.parametersJson = this.toParametersJsonInput(dto.parametersJson);
-    }
-
-    const updatedModel =
-      Object.keys(data).length > 0
-        ? await this.prisma.aIModelConfig.update({
-            where: { id: model.id },
-            data,
-            include: {
-              provider: true,
-            },
-          })
-        : await this.prisma.aIModelConfig.findUniqueOrThrow({
-            where: { id: model.id },
-            include: {
-              provider: true,
-            },
-          });
+      });
+    });
 
     return this.serializeModel(updatedModel);
   }
@@ -333,6 +424,96 @@ export class AiConfigService {
     }
   }
 
+  private assertDefaultModelEnabled(
+    isDefault: boolean | undefined,
+    enabled: boolean,
+  ) {
+    if (isDefault && !enabled) {
+      throw new BadRequestException('Default AI models must remain enabled');
+    }
+  }
+
+  private async listProviderTaskTypes(
+    tx: PrismaTransactionClient,
+    providerConfigId: string,
+  ) {
+    const models = await tx.aIModelConfig.findMany({
+      where: {
+        providerConfigId,
+      },
+      select: {
+        taskType: true,
+      },
+      distinct: ['taskType'],
+    });
+
+    return models.map((model) => model.taskType);
+  }
+
+  private async syncDefaultModel(
+    tx: PrismaTransactionClient,
+    userId: string,
+    taskType: AIModelConfig['taskType'],
+    preferredModelId?: string,
+  ) {
+    const enabledModels = await tx.aIModelConfig.findMany({
+      where: {
+        taskType,
+        enabled: true,
+        provider: {
+          userId,
+          enabled: true,
+        },
+      },
+      select: {
+        id: true,
+        isDefault: true,
+      },
+      orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+    });
+
+    const chosenModelId =
+      preferredModelId &&
+      enabledModels.some((model) => model.id === preferredModelId)
+        ? preferredModelId
+        : (enabledModels.find((item) => item.isDefault)?.id ??
+          enabledModels[0]?.id);
+
+    await tx.aIModelConfig.updateMany({
+      where: {
+        taskType,
+        isDefault: true,
+        provider: {
+          userId,
+        },
+        ...(chosenModelId
+          ? {
+              id: {
+                not: chosenModelId,
+              },
+            }
+          : {}),
+      },
+      data: {
+        isDefault: false,
+      },
+    });
+
+    if (!chosenModelId) {
+      return;
+    }
+
+    await tx.aIModelConfig.updateMany({
+      where: {
+        id: chosenModelId,
+        isDefault: false,
+      },
+      data: {
+        isDefault: true,
+      },
+    });
+  }
+
   private toParametersJsonInput(
     value: Record<string, unknown> | null | undefined,
   ): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput | undefined {
@@ -381,6 +562,7 @@ export class AiConfigService {
       modelCode: model.modelCode,
       displayName: model.displayName,
       taskType: model.taskType,
+      isDefault: model.isDefault,
       enabled: model.enabled,
       parametersJson: model.parametersJson,
       createdAt: model.createdAt,
@@ -396,6 +578,7 @@ export class AiConfigService {
       modelCode: model.modelCode,
       displayName: model.displayName,
       taskType: model.taskType,
+      isDefault: model.isDefault,
       enabled: model.enabled,
       parametersJson: model.parametersJson,
       createdAt: model.createdAt,

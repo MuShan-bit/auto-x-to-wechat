@@ -593,6 +593,7 @@ model AIModelConfig {
   modelCode        String           @map("model_code")
   displayName      String           @map("display_name")
   taskType         AITaskType       @map("task_type")
+  isDefault        Boolean          @default(false) @map("is_default")
   enabled          Boolean          @default(true)
   parametersJson   Json?            @map("parameters_json")
   createdAt        DateTime         @default(now()) @map("created_at")

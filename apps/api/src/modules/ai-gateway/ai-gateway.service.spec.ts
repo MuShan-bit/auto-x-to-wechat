@@ -5,10 +5,7 @@ import {
   type AIProviderConfig,
 } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
-import {
-  BadRequestException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { CredentialCryptoService } from '../crypto/credential-crypto.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import { AiGatewayService } from './ai-gateway.service';
@@ -42,6 +39,7 @@ function createModelRecord(
     modelCode: 'openrouter/auto',
     displayName: 'Classifier',
     taskType: AITaskType.POST_CLASSIFY,
+    isDefault: false,
     enabled: true,
     parametersJson: {
       temperature: 0.2,
@@ -60,6 +58,9 @@ describe('AiGatewayService', () => {
   let anthropicAdapter: AiProviderAdapter;
   let geminiAdapter: AiProviderAdapter;
   let prisma: {
+    aIProviderConfig: {
+      findFirst: jest.Mock;
+    };
     aIModelConfig: {
       findFirst: jest.Mock;
     };
@@ -72,7 +73,10 @@ describe('AiGatewayService', () => {
 
     openAiAdapter = {
       supports: jest.fn((providerType: AIProviderType) => {
-        return providerType === AIProviderType.OPENAI_COMPATIBLE;
+        return (
+          providerType === AIProviderType.OPENAI_COMPATIBLE ||
+          providerType === AIProviderType.OPENAI
+        );
       }),
       generateText: jest.fn().mockResolvedValue({
         text: '{"category":"AI"}',
@@ -123,6 +127,9 @@ describe('AiGatewayService', () => {
     };
 
     prisma = {
+      aIProviderConfig: {
+        findFirst: jest.fn(),
+      },
       aIModelConfig: {
         findFirst: jest.fn(),
       },
@@ -137,7 +144,9 @@ describe('AiGatewayService', () => {
 
   it('resolves a task model and delegates to the matching provider adapter', async () => {
     const provider = createProviderRecord(credentialCryptoService);
-    const model = createModelRecord(provider);
+    const model = createModelRecord(provider, {
+      isDefault: true,
+    });
     prisma.aIModelConfig.findFirst.mockResolvedValue(model);
 
     const result = await service.generateText('ai_owner', {
@@ -170,7 +179,7 @@ describe('AiGatewayService', () => {
       include: {
         provider: true,
       },
-      orderBy: [{ createdAt: 'asc' }],
+      orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
     });
     expect(openAiAdapter.generateText).toHaveBeenCalledWith({
       providerType: AIProviderType.OPENAI_COMPATIBLE,
@@ -299,5 +308,95 @@ describe('AiGatewayService', () => {
         ],
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('prefers the default task model and can test provider connectivity', async () => {
+    const provider = createProviderRecord(credentialCryptoService, {
+      id: 'provider-openai',
+      providerType: AIProviderType.OPENAI,
+      baseUrl: null,
+    });
+    const fallbackModel = createModelRecord(provider, {
+      id: 'model-fallback',
+      modelCode: 'gpt-4.1-mini',
+      displayName: 'Fallback',
+      isDefault: false,
+      createdAt: new Date('2026-03-21T00:01:00.000Z'),
+      updatedAt: new Date('2026-03-21T00:01:00.000Z'),
+    });
+    const defaultModel = createModelRecord(provider, {
+      id: 'model-default',
+      modelCode: 'gpt-5.2',
+      displayName: 'Primary',
+      isDefault: true,
+      createdAt: new Date('2026-03-21T00:02:00.000Z'),
+      updatedAt: new Date('2026-03-21T00:02:00.000Z'),
+    });
+
+    prisma.aIModelConfig.findFirst
+      .mockResolvedValueOnce(defaultModel)
+      .mockResolvedValueOnce(defaultModel)
+      .mockResolvedValueOnce(defaultModel);
+    prisma.aIProviderConfig.findFirst.mockResolvedValue(provider);
+
+    await service.generateText('ai_owner', {
+      taskType: AITaskType.POST_CLASSIFY,
+      messages: [
+        {
+          role: 'user',
+          content: 'Use the default model',
+        },
+      ],
+    });
+
+    expect(prisma.aIModelConfig.findFirst).toHaveBeenNthCalledWith(1, {
+      where: {
+        taskType: AITaskType.POST_CLASSIFY,
+        enabled: true,
+        provider: {
+          userId: 'ai_owner',
+          enabled: true,
+        },
+      },
+      include: {
+        provider: true,
+      },
+      orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+    });
+
+    await expect(
+      service.testProviderConnection('ai_owner', provider.id, {
+        modelConfigId: defaultModel.id,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        providerConfigId: provider.id,
+        modelConfigId: defaultModel.id,
+        modelCode: defaultModel.modelCode,
+        providerType: AIProviderType.OPENAI,
+        text: '{"category":"AI"}',
+      }),
+    );
+
+    await expect(
+      service.testProviderConnection('ai_owner', provider.id),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        providerConfigId: provider.id,
+        modelConfigId: defaultModel.id,
+        modelCode: defaultModel.modelCode,
+      }),
+    );
+
+    expect(openAiAdapter.generateText).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        providerType: AIProviderType.OPENAI,
+        baseUrl: null,
+        modelCode: defaultModel.modelCode,
+        maxAttempts: 1,
+        timeoutMs: 15000,
+      }),
+    );
   });
 });

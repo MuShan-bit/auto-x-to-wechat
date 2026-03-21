@@ -76,6 +76,64 @@ export class AiGatewayService {
     };
   }
 
+  async testProviderConnection(
+    userId: string,
+    providerConfigId: string,
+    options: {
+      modelCode?: string;
+      modelConfigId?: string;
+      timeoutMs?: number;
+    } = {},
+  ) {
+    const provider = await this.prisma.aIProviderConfig.findFirst({
+      where: {
+        id: providerConfigId,
+        userId,
+      },
+    });
+
+    if (!provider) {
+      throw new NotFoundException('AI provider config not found');
+    }
+
+    const model = await this.resolveProviderTestModel(userId, provider.id, {
+      modelCode: options.modelCode,
+      modelConfigId: options.modelConfigId,
+    });
+    const adapter = this.resolveAdapter(provider.providerType);
+    const result = await adapter.generateText({
+      providerType: provider.providerType,
+      baseUrl: provider.baseUrl,
+      apiKey: this.credentialCryptoService.decrypt(provider.apiKeyEncrypted),
+      modelCode: model.modelCode,
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a connectivity check assistant.',
+        },
+        {
+          role: 'user',
+          content: 'Reply with OK only.',
+        },
+      ],
+      responseFormat: 'text',
+      timeoutMs: options.timeoutMs ?? 15_000,
+      maxAttempts: 1,
+      parameters: {},
+    });
+
+    return {
+      providerConfigId: provider.id,
+      modelConfigId: model.modelConfigId,
+      modelCode: model.modelCode,
+      providerType: provider.providerType,
+      text: result.text,
+      finishReason: result.finishReason,
+      usage: result.usage,
+      rawResponseJson: result.rawResponseJson,
+    };
+  }
+
   private async resolveModel(
     userId: string,
     taskType: AiGatewayRequest['taskType'],
@@ -104,7 +162,7 @@ export class AiGatewayService {
       include: {
         provider: true,
       },
-      orderBy: [{ createdAt: 'asc' }],
+      orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
     });
 
     if (!model) {
@@ -116,6 +174,68 @@ export class AiGatewayService {
     }
 
     return model;
+  }
+
+  private async resolveProviderTestModel(
+    userId: string,
+    providerConfigId: string,
+    options: {
+      modelCode?: string;
+      modelConfigId?: string;
+    },
+  ) {
+    if (options.modelConfigId) {
+      const model = await this.prisma.aIModelConfig.findFirst({
+        where: {
+          id: options.modelConfigId,
+          providerConfigId,
+          provider: {
+            userId,
+          },
+        },
+      });
+
+      if (!model) {
+        throw new NotFoundException('AI model config not found');
+      }
+
+      return {
+        modelConfigId: model.id,
+        modelCode: model.modelCode,
+      };
+    }
+
+    if (options.modelCode) {
+      return {
+        modelConfigId: null,
+        modelCode: options.modelCode,
+      };
+    }
+
+    const model = await this.prisma.aIModelConfig.findFirst({
+      where: {
+        providerConfigId,
+        provider: {
+          userId,
+        },
+      },
+      orderBy: [
+        { enabled: 'desc' },
+        { isDefault: 'desc' },
+        { createdAt: 'asc' },
+      ],
+    });
+
+    if (!model) {
+      throw new BadRequestException(
+        'Testing a provider requires a model config or model code',
+      );
+    }
+
+    return {
+      modelConfigId: model.id,
+      modelCode: model.modelCode,
+    };
   }
 
   private resolveAdapter(providerType: AIProviderType) {
@@ -138,4 +258,3 @@ export class AiGatewayService {
     return value as Record<string, unknown>;
   }
 }
-
