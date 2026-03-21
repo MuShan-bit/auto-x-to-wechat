@@ -1062,7 +1062,7 @@ function TaskAuditTable({
 
   return (
     <div className="space-y-4">
-      <div className="overflow-hidden rounded-[1.5rem] border border-border/60 bg-[#fbfcfb] dark:border-white/10 dark:bg-white/4">
+      <div className="overflow-hidden border border-border/60 bg-[#fbfcfb] dark:border-white/10 dark:bg-white/4">
         <Table>
           <TableHeader className="bg-[#f4f7f3] dark:bg-white/6">
             <TableRow className="border-border/60 dark:border-white/8 hover:bg-transparent">
