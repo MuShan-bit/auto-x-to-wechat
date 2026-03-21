@@ -185,7 +185,7 @@ export function buildReportTitleBadge(
   report: Pick<ReportDetailRecord, "reportType" | "status">,
   messages: {
     enums: {
-      reportType: Record<"WEEKLY" | "MONTHLY", string>;
+      reportType: Record<"DAILY" | "WEEKLY" | "MONTHLY", string>;
       reportStatus: Record<"DRAFT" | "READY" | "FAILED", string>;
     };
   },

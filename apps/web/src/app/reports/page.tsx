@@ -165,6 +165,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
                 className="h-11 w-full rounded-2xl border border-border/70 bg-white px-4 text-sm text-foreground outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/40 dark:border-white/10 dark:bg-white/10"
               >
                 <option value="">{messages.reports.allReportTypes}</option>
+                <option value="DAILY">{messages.enums.reportType.DAILY}</option>
                 <option value="WEEKLY">{messages.enums.reportType.WEEKLY}</option>
                 <option value="MONTHLY">{messages.enums.reportType.MONTHLY}</option>
               </select>

@@ -113,6 +113,10 @@ describe("ReportDetailPage", () => {
       "href",
       "https://x.com/demo/status/001",
     );
+    expect(screen.getByRole("link", { name: "导出 Markdown" })).toHaveAttribute(
+      "href",
+      "/api/reports/report-001/export?format=md",
+    );
     expect(screen.getByRole("button", { name: "发起发布草稿" })).toBeDisabled();
   });
 });

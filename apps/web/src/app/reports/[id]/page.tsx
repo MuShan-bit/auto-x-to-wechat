@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ExternalLink, FileText, SendHorizonal } from "lucide-react";
+import {
+  ArrowLeft,
+  Download,
+  ExternalLink,
+  FileText,
+  SendHorizonal,
+} from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { PageHeader } from "@/components/page-header";
@@ -276,6 +282,44 @@ export default async function ReportDetailPage({
               locale={locale}
               report={report}
             />
+
+            <Card className="rounded-[2rem] border-border/70 bg-white/92 shadow-[0_24px_80px_-40px_rgba(45,77,63,0.24)] dark:border-white/10 dark:bg-white/6 dark:shadow-[0_24px_80px_-40px_rgba(0,0,0,0.5)]">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="flex size-11 items-center justify-center rounded-2xl bg-[#eef4f0] text-[#2d4d3f] dark:bg-[#223228] dark:text-[#d8e2db]">
+                    <Download className="size-5" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-2xl">
+                      {messages.reportDetail.exportTitle}
+                    </CardTitle>
+                    <CardDescription className="leading-6">
+                      {messages.reportDetail.exportDescription}
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="grid gap-3 sm:grid-cols-3">
+                <Link
+                  href={`/api/reports/${report.id}/export?format=md`}
+                  className="inline-flex h-11 items-center justify-center rounded-full border border-border bg-white px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted dark:border-white/10 dark:bg-white/8 dark:hover:bg-white/12"
+                >
+                  {messages.reportDetail.exportMarkdown}
+                </Link>
+                <Link
+                  href={`/api/reports/${report.id}/export?format=html`}
+                  className="inline-flex h-11 items-center justify-center rounded-full border border-border bg-white px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted dark:border-white/10 dark:bg-white/8 dark:hover:bg-white/12"
+                >
+                  {messages.reportDetail.exportHtml}
+                </Link>
+                <Link
+                  href={`/api/reports/${report.id}/export?format=txt`}
+                  className="inline-flex h-11 items-center justify-center rounded-full border border-border bg-white px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted dark:border-white/10 dark:bg-white/8 dark:hover:bg-white/12"
+                >
+                  {messages.reportDetail.exportText}
+                </Link>
+              </CardContent>
+            </Card>
 
             <Card className="rounded-[2rem] border-border/70 bg-white/92 shadow-[0_24px_80px_-40px_rgba(87,62,22,0.24)] dark:border-white/10 dark:bg-white/6 dark:shadow-[0_24px_80px_-40px_rgba(0,0,0,0.5)]">
               <CardHeader>

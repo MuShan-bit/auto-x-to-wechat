@@ -306,11 +306,12 @@ export class ReportsService {
 
   private assertSupportedReportType(reportType: ReportType) {
     if (
+      reportType !== ReportType.DAILY &&
       reportType !== ReportType.WEEKLY &&
       reportType !== ReportType.MONTHLY
     ) {
       throw new BadRequestException(
-        'Only weekly and monthly reports are supported right now',
+        'Only daily, weekly, and monthly reports are supported right now',
       );
     }
   }

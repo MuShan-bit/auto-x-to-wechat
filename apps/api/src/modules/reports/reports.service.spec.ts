@@ -114,21 +114,21 @@ describe('ReportsService', () => {
     expect(monthlyReport.sourcePosts).toHaveLength(0);
   });
 
-  it('rejects unsupported report types and unavailable source posts', async () => {
+  it('accepts daily reports and rejects unavailable source posts', async () => {
     const ownerBinding = await createBinding('report_owner', 'report_owner_src');
     const otherBinding = await createBinding('report_other', 'report_other_src');
     const otherPost = await createArchive(otherBinding.id, 'report_other_src', '001');
 
     await createArchive(ownerBinding.id, 'report_owner_src', '001');
 
-    await expect(
-      reportsService.createReportForUser('report_owner', {
+    const dailyReport = await reportsService.createReportForUser('report_owner', {
         reportType: ReportType.DAILY,
         title: 'Daily recap',
         periodStart: '2026-03-21T00:00:00.000Z',
         periodEnd: '2026-03-22T00:00:00.000Z',
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+      });
+
+    expect(dailyReport.reportType).toBe(ReportType.DAILY);
 
     await expect(
       reportsService.createReportForUser('report_owner', {

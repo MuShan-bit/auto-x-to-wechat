@@ -685,6 +685,11 @@ type Messages = {
     regenerateDescription: string;
     regenerate: string;
     regenerating: string;
+    exportTitle: string;
+    exportDescription: string;
+    exportMarkdown: string;
+    exportHtml: string;
+    exportText: string;
     publishTitle: string;
     publishDescription: string;
     publishPendingHint: string;
@@ -773,7 +778,7 @@ type Messages = {
       "PENDING" | "RUNNING" | "SUCCESS" | "FAILED" | "CANCELLED",
       string
     >;
-    reportType: Record<"WEEKLY" | "MONTHLY", string>;
+    reportType: Record<"DAILY" | "WEEKLY" | "MONTHLY", string>;
     reportStatus: Record<"DRAFT" | "READY" | "FAILED", string>;
   };
   actions: {
@@ -870,6 +875,7 @@ type Messages = {
       generateValidationFailed: string;
       updateValidationFailed: string;
       regenerateValidationFailed: string;
+      invalidExportFormat: string;
       reportUpdated: string;
       reportRegenerated: string;
     };
@@ -1691,6 +1697,12 @@ const messages: Record<Locale, Messages> = {
         "基于当前报告的原始周期和过滤条件重新调用 AI 生成内容，适合在更换模型或更新归档后重跑。",
       regenerate: "重新生成报告",
       regenerating: "重新生成中...",
+      exportTitle: "手动导出",
+      exportDescription:
+        "将当前报告导出为 Markdown、HTML 或纯文本文件，便于离线存档、二次编辑或外部发布。",
+      exportMarkdown: "导出 Markdown",
+      exportHtml: "导出 HTML",
+      exportText: "导出纯文本",
       publishTitle: "发布草稿",
       publishDescription:
         "这里将承接后续的一键发布流程，把报告整理为面向外部平台的发布草稿。",
@@ -1820,6 +1832,7 @@ const messages: Record<Locale, Messages> = {
         CANCELLED: "已取消",
       },
       reportType: {
+        DAILY: "日报",
         WEEKLY: "周报",
         MONTHLY: "月报",
       },
@@ -1926,6 +1939,7 @@ const messages: Record<Locale, Messages> = {
         generateValidationFailed: "报告生成参数校验失败。",
         updateValidationFailed: "报告编辑内容校验失败。",
         regenerateValidationFailed: "报告重生成校验失败。",
+        invalidExportFormat: "不支持的导出格式。",
         reportUpdated: "报告内容已保存。",
         reportRegenerated: "报告已重新生成。",
       },
@@ -2752,6 +2766,12 @@ const messages: Record<Locale, Messages> = {
         "Reuse the original report period and filters to call AI again. This is helpful after changing models or refreshing archived data.",
       regenerate: "Regenerate report",
       regenerating: "Regenerating...",
+      exportTitle: "Manual export",
+      exportDescription:
+        "Export the current report as Markdown, HTML, or plain text for offline storage, further editing, or external publishing.",
+      exportMarkdown: "Export Markdown",
+      exportHtml: "Export HTML",
+      exportText: "Export plain text",
       publishTitle: "Publishing draft",
       publishDescription:
         "This panel is reserved for the next publishing workflow that turns reports into channel-ready drafts.",
@@ -2881,6 +2901,7 @@ const messages: Record<Locale, Messages> = {
         CANCELLED: "Cancelled",
       },
       reportType: {
+        DAILY: "Daily",
         WEEKLY: "Weekly",
         MONTHLY: "Monthly",
       },
@@ -2993,6 +3014,7 @@ const messages: Record<Locale, Messages> = {
         generateValidationFailed: "Report generation validation failed.",
         updateValidationFailed: "Report update validation failed.",
         regenerateValidationFailed: "Report regeneration validation failed.",
+        invalidExportFormat: "Unsupported export format.",
         reportUpdated: "Report content has been saved.",
         reportRegenerated: "Report has been regenerated.",
       },

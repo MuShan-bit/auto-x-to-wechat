@@ -1,4 +1,4 @@
-export type ReportTypeValue = "WEEKLY" | "MONTHLY";
+export type ReportTypeValue = "DAILY" | "WEEKLY" | "MONTHLY";
 export type ReportStatusValue = "DRAFT" | "READY" | "FAILED";
 export type CrawlModeValue = "RECOMMENDED" | "HOT" | "SEARCH";
 
