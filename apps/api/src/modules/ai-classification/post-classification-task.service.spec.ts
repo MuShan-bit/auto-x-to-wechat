@@ -419,4 +419,51 @@ describe('PostClassificationTaskService', () => {
       BadRequestException,
     );
   });
+
+  it('supports manual single and batch reruns', async () => {
+    const rerunSpy = jest
+      .spyOn(service, 'enqueueAndExecute')
+      .mockResolvedValueOnce({
+        id: 'task-single',
+      } as never)
+      .mockResolvedValueOnce({
+        id: 'task-batch-1',
+      } as never)
+      .mockRejectedValueOnce(new Error('Archive missing'));
+
+    await expect(
+      service.rerunArchivedPostClassification('ai_owner', 'archive-001'),
+    ).resolves.toEqual({
+      id: 'task-single',
+    });
+
+    await expect(
+      service.rerunArchivedPostClassificationBatch('ai_owner', [
+        'archive-001',
+        'archive-002',
+      ]),
+    ).resolves.toEqual({
+      requestedCount: 2,
+      succeededCount: 1,
+      failedCount: 1,
+      items: [
+        {
+          archivedPostId: 'archive-001',
+          status: 'SUCCESS',
+          taskRecordId: 'task-batch-1',
+          errorMessage: null,
+        },
+        {
+          archivedPostId: 'archive-002',
+          status: 'FAILED',
+          taskRecordId: null,
+          errorMessage: 'Archive missing',
+        },
+      ],
+    });
+
+    expect(rerunSpy).toHaveBeenNthCalledWith(1, 'ai_owner', 'archive-001');
+    expect(rerunSpy).toHaveBeenNthCalledWith(2, 'ai_owner', 'archive-001');
+    expect(rerunSpy).toHaveBeenNthCalledWith(3, 'ai_owner', 'archive-002');
+  });
 });

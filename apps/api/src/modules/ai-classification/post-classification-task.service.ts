@@ -173,6 +173,48 @@ export class PostClassificationTaskService {
     return this.executeTask(userId, taskRecord.id);
   }
 
+  rerunArchivedPostClassification(userId: string, archivedPostId: string) {
+    return this.enqueueAndExecute(userId, archivedPostId);
+  }
+
+  async rerunArchivedPostClassificationBatch(
+    userId: string,
+    archivedPostIds: string[],
+  ) {
+    const uniqueArchivedPostIds = [...new Set(archivedPostIds)];
+    const results = await Promise.all(
+      uniqueArchivedPostIds.map(async (archivedPostId) => {
+        try {
+          const taskRecord = await this.enqueueAndExecute(userId, archivedPostId);
+
+          return {
+            archivedPostId,
+            status: 'SUCCESS' as const,
+            taskRecordId: taskRecord.id,
+            errorMessage: null,
+          };
+        } catch (error) {
+          return {
+            archivedPostId,
+            status: 'FAILED' as const,
+            taskRecordId: null,
+            errorMessage:
+              error instanceof Error
+                ? error.message
+                : 'AI classification rerun failed',
+          };
+        }
+      }),
+    );
+
+    return {
+      requestedCount: uniqueArchivedPostIds.length,
+      succeededCount: results.filter((item) => item.status === 'SUCCESS').length,
+      failedCount: results.filter((item) => item.status === 'FAILED').length,
+      items: results,
+    };
+  }
+
   private buildPromptInput(
     archivedPost: ArchivedPostDetail,
     categories: Awaited<ReturnType<TaxonomyService['listCategories']>>,
