@@ -79,6 +79,14 @@ type ListReportsOptions = {
   status?: ReportStatus;
 };
 
+type UpdateReportInput = {
+  renderedHtml?: string | null;
+  richTextJson?: Prisma.InputJsonValue;
+  status?: ReportStatus;
+  summaryJson?: Prisma.InputJsonValue;
+  title?: string;
+};
+
 @Injectable()
 export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -205,6 +213,62 @@ export class ReportsService {
     }
 
     return report;
+  }
+
+  async updateReportForUser(
+    userId: string,
+    reportId: string,
+    input: UpdateReportInput,
+  ) {
+    const report = await this.prisma.report.findFirst({
+      where: {
+        id: reportId,
+        userId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!report) {
+      throw new NotFoundException('Report not found');
+    }
+
+    const data: Prisma.ReportUncheckedUpdateInput = {};
+
+    if (input.title !== undefined) {
+      const title = input.title.trim();
+
+      if (title.length === 0) {
+        throw new BadRequestException('Report title is required');
+      }
+
+      data.title = title;
+    }
+
+    if (input.status !== undefined) {
+      data.status = input.status;
+    }
+
+    if (input.richTextJson !== undefined) {
+      data.richTextJson = input.richTextJson;
+    }
+
+    if (input.renderedHtml !== undefined) {
+      data.renderedHtml = input.renderedHtml;
+    }
+
+    if (input.summaryJson !== undefined) {
+      data.summaryJson = input.summaryJson;
+    }
+
+    return this.prisma.report.update({
+      where: {
+        id: report.id,
+      },
+      data,
+      include: reportDetailInclude,
+    });
   }
 
   private assertSupportedReportType(reportType: ReportType) {
