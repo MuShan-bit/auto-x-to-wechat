@@ -39,6 +39,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   formatMessage,
   getIntlLocale,
   getMessages,
@@ -67,6 +75,7 @@ type ModelDialogState =
   | null;
 
 const initialActionState: AiActionState = {};
+const AUDIT_PAGE_SIZE = 6;
 
 function formatDateTime(value: string, locale: Locale) {
   return new Intl.DateTimeFormat(getIntlLocale(locale), {
@@ -930,7 +939,7 @@ function UsageBreakdownList({
   );
 }
 
-function TaskAuditRecordCard({
+function TaskAuditTableRow({
   locale,
   record,
 }: {
@@ -940,8 +949,8 @@ function TaskAuditRecordCard({
   const messages = getMessages(locale);
 
   return (
-    <div className="rounded-[1.5rem] border border-border/70 bg-[#fbfcfb] p-5 dark:border-white/10 dark:bg-white/6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <TableRow className="border-border/60 align-top dark:border-white/8 dark:hover:bg-white/4">
+      <TableCell className="min-w-[210px] py-4">
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <ModelTaskBadge locale={locale} taskType={record.taskType} />
@@ -959,24 +968,41 @@ function TaskAuditRecordCard({
               </Badge>
             ) : null}
           </div>
-          <div className="space-y-1 text-sm leading-6 text-muted-foreground">
-            <p className="text-base font-semibold text-foreground">
-              {record.model?.displayName ?? messages.ai.auditNoModel}
+          {record.errorMessage ? (
+            <p className="text-sm leading-6 text-red-700 dark:text-red-200">
+              {record.errorMessage}
             </p>
-            <p>
-              {record.provider?.name ?? messages.ai.auditNoProvider}
-              {record.provider
-                ? ` · ${messages.enums.aiProviderType[record.provider.providerType]}`
-                : ""}
+          ) : (
+            <p className="text-sm leading-6 text-muted-foreground">
+              {messages.enums.aiTaskStatus[record.status]}
             </p>
-            <p>
-              {messages.ai.auditTargetLabel}: {record.targetType} /{" "}
-              {record.targetId}
-            </p>
-          </div>
+          )}
         </div>
+      </TableCell>
 
-        <div className="space-y-1 text-right text-sm leading-6 text-muted-foreground">
+      <TableCell className="min-w-[240px] py-4">
+        <div className="space-y-1 text-sm leading-6 text-muted-foreground">
+          <p className="font-semibold text-foreground">
+            {record.model?.displayName ?? messages.ai.auditNoModel}
+          </p>
+          <p>
+            {record.provider?.name ?? messages.ai.auditNoProvider}
+            {record.provider
+              ? ` · ${messages.enums.aiProviderType[record.provider.providerType]}`
+              : ""}
+          </p>
+        </div>
+      </TableCell>
+
+      <TableCell className="min-w-[220px] py-4">
+        <div className="space-y-1 text-sm leading-6 text-muted-foreground">
+          <p className="font-medium text-foreground">{record.targetType}</p>
+          <p className="break-all whitespace-normal">{record.targetId}</p>
+        </div>
+      </TableCell>
+
+      <TableCell className="min-w-[160px] py-4">
+        <div className="space-y-1 text-sm leading-6 text-muted-foreground">
           <p>
             {messages.ai.auditTokensLabel}:{" "}
             {formatNumberValue(record.totalTokens ?? 0, locale)}
@@ -988,25 +1014,103 @@ function TaskAuditRecordCard({
               : formatUsdValue(record.estimatedCostUsd, locale)}
           </p>
         </div>
-      </div>
+      </TableCell>
 
-      <div className="mt-4 grid gap-2 text-sm leading-6 text-muted-foreground sm:grid-cols-2">
-        <p>
-          {messages.common.createdAt}: {formatDateTime(record.createdAt, locale)}
-        </p>
-        <p>
-          {messages.common.finishedAt}:{" "}
-          {record.finishedAt
-            ? formatDateTime(record.finishedAt, locale)
-            : messages.common.notRecorded}
-        </p>
-      </div>
-
-      {record.errorMessage ? (
-        <div className="mt-4 rounded-[1.25rem] bg-red-50 px-4 py-3 text-sm leading-6 text-red-700 dark:bg-red-950/30 dark:text-red-200">
-          {record.errorMessage}
+      <TableCell className="min-w-[210px] py-4">
+        <div className="space-y-1 text-sm leading-6 text-muted-foreground">
+          <p>
+            {messages.common.createdAt}: {formatDateTime(record.createdAt, locale)}
+          </p>
+          <p>
+            {messages.common.finishedAt}:{" "}
+            {record.finishedAt
+              ? formatDateTime(record.finishedAt, locale)
+              : messages.common.notRecorded}
+          </p>
         </div>
-      ) : null}
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function TaskAuditTable({
+  locale,
+  onNextPage,
+  onPreviousPage,
+  page,
+  pageSize,
+  records,
+}: {
+  locale: Locale;
+  onNextPage: () => void;
+  onPreviousPage: () => void;
+  page: number;
+  pageSize: number;
+  records: AiTaskAuditRecord[];
+}) {
+  const messages = getMessages(locale);
+  const totalPages = Math.max(1, Math.ceil(records.length / pageSize));
+  const pageStartIndex = (page - 1) * pageSize;
+  const paginatedRecords = records.slice(pageStartIndex, pageStartIndex + pageSize);
+
+  return (
+    <div className="space-y-4">
+      <div className="overflow-hidden rounded-[1.5rem] border border-border/60 bg-[#fbfcfb] dark:border-white/10 dark:bg-white/4">
+        <Table>
+          <TableHeader className="bg-[#f4f7f3] dark:bg-white/6">
+            <TableRow className="border-border/60 dark:border-white/8 hover:bg-transparent">
+              <TableHead>{messages.ai.auditTaskHeader}</TableHead>
+              <TableHead>{messages.ai.auditModelHeader}</TableHead>
+              <TableHead>{messages.ai.auditTargetLabel}</TableHead>
+              <TableHead>{messages.ai.auditUsageHeader}</TableHead>
+              <TableHead>{messages.ai.auditTimeHeader}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {paginatedRecords.map((record) => (
+              <TaskAuditTableRow key={record.id} locale={locale} record={record} />
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-medium text-foreground">
+            {formatMessage(messages.pagination.pageSummary, {
+              page,
+              totalPages,
+            })}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {formatMessage(messages.pagination.totalRecords, {
+              total: records.length,
+            })}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <Button
+            className="rounded-full border border-border bg-white px-4 text-foreground hover:bg-muted dark:border-white/10 dark:bg-white/8 dark:hover:bg-white/12"
+            disabled={page <= 1}
+            onClick={onPreviousPage}
+            type="button"
+            variant="outline"
+          >
+            {messages.pagination.previous}
+          </Button>
+          <Button
+            className="rounded-full bg-[#2d4d3f] px-4 text-white hover:bg-[#20372d] dark:bg-[#d8e2db] dark:text-[#18201b] dark:hover:bg-[#c8d3cb]"
+            disabled={page >= totalPages}
+            onClick={onNextPage}
+            type="button"
+          >
+            {page >= totalPages
+              ? messages.pagination.reachedEnd
+              : messages.pagination.next}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1025,6 +1129,7 @@ export function AiConsole({
     useState<ProviderDialogState>(null);
   const [modelDialogState, setModelDialogState] =
     useState<ModelDialogState>(null);
+  const [auditPage, setAuditPage] = useState(1);
   const [testState, testAction, isTestPending] = useActionState(
     testProviderAction,
     initialActionState,
@@ -1033,6 +1138,14 @@ export function AiConsole({
     setDefaultModelAction,
     initialActionState,
   );
+  const auditTotalPages = Math.max(
+    1,
+    Math.ceil(taskRecords.length / AUDIT_PAGE_SIZE),
+  );
+
+  useEffect(() => {
+    setAuditPage((currentPage) => Math.min(currentPage, auditTotalPages));
+  }, [auditTotalPages]);
 
   const summary = useMemo(() => {
     const enabledProviderCount = providers.filter(
@@ -1083,6 +1196,14 @@ export function AiConsole({
       })),
     };
   }, [locale, messages, usageSummary]);
+
+  const handleAuditPreviousPage = () => {
+    setAuditPage((currentPage) => Math.max(1, currentPage - 1));
+  };
+
+  const handleAuditNextPage = () => {
+    setAuditPage((currentPage) => Math.min(auditTotalPages, currentPage + 1));
+  };
 
   return (
     <div className="space-y-6">
@@ -1284,13 +1405,14 @@ export function AiConsole({
                 description={messages.ai.auditEmptyDescription}
               />
             ) : (
-              taskRecords.map((record) => (
-                <TaskAuditRecordCard
-                  key={record.id}
-                  locale={locale}
-                  record={record}
-                />
-              ))
+              <TaskAuditTable
+                locale={locale}
+                onNextPage={handleAuditNextPage}
+                onPreviousPage={handleAuditPreviousPage}
+                page={auditPage}
+                pageSize={AUDIT_PAGE_SIZE}
+                records={taskRecords}
+              />
             )}
           </CardContent>
         </Card>

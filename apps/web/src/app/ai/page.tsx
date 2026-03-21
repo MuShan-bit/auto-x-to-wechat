@@ -26,7 +26,7 @@ async function getAiData() {
       method: "GET",
     }),
     apiRequest<AiTaskAuditRecord[]>({
-      path: "/ai/tasks?limit=12",
+      path: "/ai/tasks?limit=30",
       method: "GET",
     }),
   ]);

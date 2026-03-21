@@ -122,7 +122,7 @@ describe("AiPage", () => {
       method: "GET",
     });
     expect(apiRequestMock).toHaveBeenNthCalledWith(4, {
-      path: "/ai/tasks?limit=12",
+      path: "/ai/tasks?limit=30",
       method: "GET",
     });
     expect(

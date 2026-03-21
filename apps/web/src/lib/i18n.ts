@@ -438,7 +438,11 @@ type Messages = {
     auditEmptyDescription: string;
     auditNoProvider: string;
     auditNoModel: string;
+    auditTaskHeader: string;
+    auditModelHeader: string;
     auditTargetLabel: string;
+    auditUsageHeader: string;
+    auditTimeHeader: string;
     auditTokensLabel: string;
     auditCostLabel: string;
     rateLimitedBadge: string;
@@ -1305,7 +1309,11 @@ const messages: Record<Locale, Messages> = {
         "当你测试模型连接或触发实际 AI 任务后，最近的调用记录会展示在这里。",
       auditNoProvider: "未关联提供商",
       auditNoModel: "未关联模型",
+      auditTaskHeader: "任务与状态",
+      auditModelHeader: "模型与提供商",
       auditTargetLabel: "目标对象",
+      auditUsageHeader: "Token 与成本",
+      auditTimeHeader: "时间",
       auditTokensLabel: "Token",
       auditCostLabel: "成本",
       rateLimitedBadge: "触发限流",
@@ -2237,7 +2245,11 @@ const messages: Record<Locale, Messages> = {
         "After you test a provider or run an AI task, the most recent calls will appear here.",
       auditNoProvider: "No provider linked",
       auditNoModel: "No model linked",
+      auditTaskHeader: "Task and status",
+      auditModelHeader: "Model and provider",
       auditTargetLabel: "Target",
+      auditUsageHeader: "Tokens and cost",
+      auditTimeHeader: "Timing",
       auditTokensLabel: "Tokens",
       auditCostLabel: "Cost",
       rateLimitedBadge: "Rate limited",
