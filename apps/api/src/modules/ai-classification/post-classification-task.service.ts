@@ -32,6 +32,24 @@ export class PostClassificationTaskService {
     private readonly postClassificationService: PostClassificationService,
   ) {}
 
+  async hasConfiguredPostClassificationModel(userId: string) {
+    const model = await this.prisma.aIModelConfig.findFirst({
+      where: {
+        taskType: AITaskType.POST_CLASSIFY,
+        enabled: true,
+        provider: {
+          userId,
+          enabled: true,
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    return model !== null;
+  }
+
   async enqueueArchivedPostClassification(userId: string, archivedPostId: string) {
     const archivedPost = await this.archivesService.getArchivedPostDetailForUser(
       userId,
@@ -114,6 +132,11 @@ export class PostClassificationTaskService {
           ),
           availableTagSlugs: promptInput.availableTags.map((tag) => tag.slug),
         },
+      );
+      await this.applyClassificationResultToArchive(
+        archivedPost.id,
+        promptInput,
+        parsedResult,
       );
 
       return await this.prisma.aITaskRecord.update({
@@ -241,6 +264,52 @@ export class PostClassificationTaskService {
       },
       finishedAt: new Date(),
     };
+  }
+
+  private async applyClassificationResultToArchive(
+    archivedPostId: string,
+    promptInput: ReturnType<PostClassificationTaskService['buildPromptInput']>,
+    parsedResult: ReturnType<PostClassificationService['parseModelOutput']>,
+  ) {
+    const primaryCategoryId =
+      promptInput.availableCategories.find(
+        (category) => category.slug === parsedResult.primaryCategorySlug,
+      )?.id ?? null;
+    const tagIds = promptInput.availableTags
+      .filter((tag) => parsedResult.tagSlugs.includes(tag.slug))
+      .map((tag) => tag.id);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.archivedPost.update({
+        where: {
+          id: archivedPostId,
+        },
+        data: {
+          primaryCategoryId,
+          primaryCategorySource: primaryCategoryId ? 'AI' : null,
+          aiSummary: parsedResult.summary,
+        },
+      });
+
+      await tx.archivedPostTag.deleteMany({
+        where: {
+          archivedPostId,
+          source: 'AI',
+        },
+      });
+
+      if (tagIds.length > 0) {
+        await tx.archivedPostTag.createMany({
+          data: tagIds.map((tagId) => ({
+            archivedPostId,
+            tagId,
+            source: 'AI',
+            confidence: new Prisma.Decimal(parsedResult.confidence),
+          })),
+          skipDuplicates: true,
+        });
+      }
+    });
   }
 
   private extractHashtags(rawPayloadJson: Prisma.JsonValue) {

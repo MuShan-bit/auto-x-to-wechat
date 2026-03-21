@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AiClassificationModule } from '../ai-classification/ai-classification.module';
 import { ArchivesModule } from '../archives/archives.module';
 import { CrawlRunsModule } from '../crawl-runs/crawl-runs.module';
 import { CrawlerModule } from '../crawler/crawler.module';
@@ -13,6 +14,7 @@ import { InlineCrawlRunDispatcherService } from './inline-crawl-run-dispatcher.s
 @Module({
   imports: [
     PrismaModule,
+    AiClassificationModule,
     ArchivesModule,
     CrawlRunsModule,
     CrawlerModule,

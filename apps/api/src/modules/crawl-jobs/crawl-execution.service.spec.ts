@@ -9,6 +9,7 @@ import {
 import { Logger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AppModule } from '../../app.module';
+import { PostClassificationTaskService } from '../ai-classification/post-classification-task.service';
 import { CredentialCryptoService } from '../crypto/credential-crypto.service';
 import { CrawlRunsService } from '../crawl-runs/crawl-runs.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,6 +19,7 @@ describe('CrawlExecutionService', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
   let credentialCryptoService: CredentialCryptoService;
+  let postClassificationTaskService: PostClassificationTaskService;
   let crawlRunsService: CrawlRunsService;
   let crawlExecutionService: CrawlExecutionService;
 
@@ -28,6 +30,7 @@ describe('CrawlExecutionService', () => {
 
     prisma = moduleRef.get(PrismaService);
     credentialCryptoService = moduleRef.get(CredentialCryptoService);
+    postClassificationTaskService = moduleRef.get(PostClassificationTaskService);
     crawlRunsService = moduleRef.get(CrawlRunsService);
     crawlExecutionService = moduleRef.get(CrawlExecutionService);
 
@@ -167,6 +170,70 @@ describe('CrawlExecutionService', () => {
         skippedCount: 0,
         failedCount: 0,
       }),
+    );
+  });
+
+  it('auto-triggers AI classification for newly archived posts when a model is configured', async () => {
+    jest
+      .spyOn(
+        postClassificationTaskService,
+        'hasConfiguredPostClassificationModel',
+      )
+      .mockResolvedValue(true);
+    const enqueueAndExecuteSpy = jest
+      .spyOn(postClassificationTaskService, 'enqueueAndExecute')
+      .mockResolvedValue({
+        id: 'ai-task-demo',
+        status: 'SUCCESS',
+      } as never);
+
+    const binding = await prisma.xAccountBinding.create({
+      data: {
+        userId: 'worker_owner',
+        xUserId: 'x-worker-auto-ai',
+        username: 'worker_auto_ai',
+        displayName: 'Worker Auto AI',
+        status: BindingStatus.ACTIVE,
+        credentialSource: CredentialSource.WEB_LOGIN,
+        authPayloadEncrypted: credentialCryptoService.encrypt(
+          '{"cookie":"worker-auto-ai"}',
+        ),
+        lastValidatedAt: new Date('2026-03-19T00:00:00.000Z'),
+        crawlEnabled: true,
+        crawlIntervalMinutes: 30,
+        nextCrawlAt: new Date('2026-03-19T12:00:00.000Z'),
+        crawlProfiles: {
+          create: [
+            {
+              mode: CrawlMode.RECOMMENDED,
+              isSystemDefault: true,
+              enabled: true,
+              intervalMinutes: 30,
+              maxPosts: 20,
+              nextRunAt: new Date('2026-03-19T12:00:00.000Z'),
+            },
+          ],
+        },
+      },
+      include: {
+        crawlProfiles: true,
+      },
+    });
+
+    const run = await crawlRunsService.createQueuedRun({
+      bindingId: binding.id,
+      crawlProfileId: binding.crawlProfiles[0]?.id,
+      triggerType: CrawlTriggerType.MANUAL,
+    });
+
+    const processedRun = await crawlExecutionService.processRun(run.id);
+
+    expect(processedRun.status).toBe(CrawlRunStatus.SUCCESS);
+    expect(enqueueAndExecuteSpy).toHaveBeenCalledTimes(2);
+    expect(enqueueAndExecuteSpy).toHaveBeenNthCalledWith(
+      1,
+      'worker_owner',
+      expect.any(String),
     );
   });
 

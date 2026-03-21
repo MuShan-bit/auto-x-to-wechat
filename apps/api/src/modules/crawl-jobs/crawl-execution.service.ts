@@ -7,6 +7,7 @@ import {
 } from '@prisma/client';
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { ArchivesService } from '../archives/archives.service';
+import { PostClassificationTaskService } from '../ai-classification/post-classification-task.service';
 import { convertNormalizedPostToRichText } from '../archives/rich-text.converter';
 import { renderRichTextToHtml } from '../archives/rich-text.renderer';
 import { createStructuredLogger } from '../../common/utils/structured-logger';
@@ -32,6 +33,7 @@ export class CrawlExecutionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly archivesService: ArchivesService,
+    private readonly postClassificationTaskService: PostClassificationTaskService,
     private readonly credentialCryptoService: CredentialCryptoService,
     private readonly crawlRunPostsService: CrawlRunPostsService,
     private readonly crawlRunsService: CrawlRunsService,
@@ -108,6 +110,10 @@ export class CrawlExecutionService {
       const postsToArchive = crawlProfile?.maxPosts
         ? normalizedPosts.slice(0, crawlProfile.maxPosts)
         : normalizedPosts;
+      const shouldAutoClassify =
+        await this.postClassificationTaskService.hasConfiguredPostClassificationModel(
+          binding.userId,
+        );
       let newCount = 0;
       let skippedCount = 0;
       let failedCount = 0;
@@ -171,6 +177,21 @@ export class CrawlExecutionService {
 
           if (result.created) {
             newCount += 1;
+            if (shouldAutoClassify) {
+              await this.postClassificationTaskService
+                .enqueueAndExecute(binding.userId, result.archivedPost.id)
+                .catch((error) => {
+                  this.logger.warn('post_auto_classification_failed', {
+                    ...logContext,
+                    archivedPostId: result.archivedPost.id,
+                    xPostId: post.xPostId,
+                    reason:
+                      error instanceof Error
+                        ? error.message
+                        : 'AI post classification failed',
+                  });
+                });
+            }
           } else {
             skippedCount += 1;
           }

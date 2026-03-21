@@ -96,10 +96,21 @@ function createArchivedPostRecord() {
 describe('PostClassificationTaskService', () => {
   let service: PostClassificationTaskService;
   let prisma: {
+    $transaction: jest.Mock;
+    aIModelConfig: {
+      findFirst: jest.Mock;
+    };
     aITaskRecord: {
       create: jest.Mock;
       findFirst: jest.Mock;
       update: jest.Mock;
+    };
+    archivedPost: {
+      update: jest.Mock;
+    };
+    archivedPostTag: {
+      createMany: jest.Mock;
+      deleteMany: jest.Mock;
     };
   };
   let archivesService: {
@@ -119,10 +130,23 @@ describe('PostClassificationTaskService', () => {
 
   beforeEach(() => {
     prisma = {
+      $transaction: jest.fn(async (callback: (tx: unknown) => unknown) =>
+        callback(prisma),
+      ),
+      aIModelConfig: {
+        findFirst: jest.fn(),
+      },
       aITaskRecord: {
         create: jest.fn(),
         findFirst: jest.fn(),
         update: jest.fn(),
+      },
+      archivedPost: {
+        update: jest.fn(),
+      },
+      archivedPostTag: {
+        createMany: jest.fn(),
+        deleteMany: jest.fn(),
       },
     };
     archivesService = {
@@ -203,6 +227,21 @@ describe('PostClassificationTaskService', () => {
     });
   });
 
+  it('detects whether a runnable post classification model is configured', async () => {
+    prisma.aIModelConfig.findFirst
+      .mockResolvedValueOnce({
+        id: 'model-001',
+      })
+      .mockResolvedValueOnce(null);
+
+    await expect(
+      service.hasConfiguredPostClassificationModel('ai_owner'),
+    ).resolves.toBe(true);
+    await expect(
+      service.hasConfiguredPostClassificationModel('ai_owner'),
+    ).resolves.toBe(false);
+  });
+
   it('executes pending tasks and marks them successful with parsed output', async () => {
     prisma.aITaskRecord.findFirst.mockResolvedValue({
       id: 'task-001',
@@ -246,6 +285,15 @@ describe('PostClassificationTaskService', () => {
         id: 'task-001',
         status: AITaskStatus.SUCCESS,
       });
+    prisma.archivedPost.update.mockResolvedValue({
+      id: 'archive-001',
+    });
+    prisma.archivedPostTag.deleteMany.mockResolvedValue({
+      count: 0,
+    });
+    prisma.archivedPostTag.createMany.mockResolvedValue({
+      count: 2,
+    });
 
     await expect(service.executeTask('ai_owner', 'task-001')).resolves.toEqual({
       id: 'task-001',
@@ -279,6 +327,39 @@ describe('PostClassificationTaskService', () => {
         totalTokens: 180,
         estimatedCostUsd: new Prisma.Decimal(0.0018),
       }),
+    });
+    expect(prisma.archivedPost.update).toHaveBeenCalledWith({
+      where: {
+        id: 'archive-001',
+      },
+      data: {
+        primaryCategoryId: 'category-ai',
+        primaryCategorySource: 'AI',
+        aiSummary: 'A concise AI summary for archive search.',
+      },
+    });
+    expect(prisma.archivedPostTag.deleteMany).toHaveBeenCalledWith({
+      where: {
+        archivedPostId: 'archive-001',
+        source: 'AI',
+      },
+    });
+    expect(prisma.archivedPostTag.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          archivedPostId: 'archive-001',
+          tagId: 'tag-openai',
+          source: 'AI',
+          confidence: new Prisma.Decimal(0.88),
+        },
+        {
+          archivedPostId: 'archive-001',
+          tagId: 'tag-agents',
+          source: 'AI',
+          confidence: new Prisma.Decimal(0.88),
+        },
+      ],
+      skipDuplicates: true,
     });
   });
 
