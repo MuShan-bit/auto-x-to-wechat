@@ -56,7 +56,9 @@ function createModelRecord(
 describe('AiGatewayService', () => {
   let service: AiGatewayService;
   let credentialCryptoService: CredentialCryptoService;
-  let adapter: AiProviderAdapter;
+  let openAiAdapter: AiProviderAdapter;
+  let anthropicAdapter: AiProviderAdapter;
+  let geminiAdapter: AiProviderAdapter;
   let prisma: {
     aIModelConfig: {
       findFirst: jest.Mock;
@@ -68,7 +70,7 @@ describe('AiGatewayService', () => {
       getOrThrow: jest.fn(() => 'demo-encryption-secret-key-1234'),
     } as unknown as ConfigService);
 
-    adapter = {
+    openAiAdapter = {
       supports: jest.fn((providerType: AIProviderType) => {
         return providerType === AIProviderType.OPENAI_COMPATIBLE;
       }),
@@ -85,6 +87,40 @@ describe('AiGatewayService', () => {
         },
       }),
     };
+    anthropicAdapter = {
+      supports: jest.fn((providerType: AIProviderType) => {
+        return providerType === AIProviderType.ANTHROPIC;
+      }),
+      generateText: jest.fn().mockResolvedValue({
+        text: '{"category":"Anthropic"}',
+        finishReason: 'end_turn',
+        usage: {
+          inputTokens: 15,
+          outputTokens: 8,
+          totalTokens: 23,
+        },
+        rawResponseJson: {
+          id: 'msg-demo',
+        },
+      }),
+    };
+    geminiAdapter = {
+      supports: jest.fn((providerType: AIProviderType) => {
+        return providerType === AIProviderType.GEMINI;
+      }),
+      generateText: jest.fn().mockResolvedValue({
+        text: '{"category":"Gemini"}',
+        finishReason: 'STOP',
+        usage: {
+          inputTokens: 14,
+          outputTokens: 6,
+          totalTokens: 20,
+        },
+        rawResponseJson: {
+          id: 'gemini-demo',
+        },
+      }),
+    };
 
     prisma = {
       aIModelConfig: {
@@ -95,7 +131,7 @@ describe('AiGatewayService', () => {
     service = new AiGatewayService(
       prisma as unknown as PrismaService,
       credentialCryptoService,
-      [adapter],
+      [anthropicAdapter, geminiAdapter, openAiAdapter],
     );
   });
 
@@ -136,7 +172,7 @@ describe('AiGatewayService', () => {
       },
       orderBy: [{ createdAt: 'asc' }],
     });
-    expect(adapter.generateText).toHaveBeenCalledWith({
+    expect(openAiAdapter.generateText).toHaveBeenCalledWith({
       providerType: AIProviderType.OPENAI_COMPATIBLE,
       baseUrl: 'https://openrouter.ai/api/v1',
       apiKey: 'sk-provider-secret',
@@ -181,12 +217,28 @@ describe('AiGatewayService', () => {
   it('supports explicit model selection and rejects unsupported providers', async () => {
     const provider = createProviderRecord(credentialCryptoService, {
       providerType: AIProviderType.GEMINI,
+      baseUrl: null,
     });
     const model = createModelRecord(provider, {
       id: 'model-explicit',
       providerConfigId: 'provider-gemini',
     });
-    prisma.aIModelConfig.findFirst.mockResolvedValueOnce(model).mockResolvedValueOnce(null);
+    const anthropicProvider = createProviderRecord(credentialCryptoService, {
+      id: 'provider-anthropic',
+      providerType: AIProviderType.ANTHROPIC,
+      name: 'Claude',
+      baseUrl: null,
+    });
+    const anthropicModel = createModelRecord(anthropicProvider, {
+      id: 'model-anthropic',
+      providerConfigId: 'provider-anthropic',
+      modelCode: 'claude-3-7-sonnet-latest',
+      displayName: 'Claude Classifier',
+    });
+    prisma.aIModelConfig.findFirst
+      .mockResolvedValueOnce(model)
+      .mockResolvedValueOnce(anthropicModel)
+      .mockResolvedValueOnce(null);
 
     await expect(
       service.generateText('ai_owner', {
@@ -199,7 +251,42 @@ describe('AiGatewayService', () => {
           },
         ],
       }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).resolves.toEqual(
+      expect.objectContaining({
+        providerType: AIProviderType.GEMINI,
+        text: '{"category":"Gemini"}',
+      }),
+    );
+    expect(geminiAdapter.generateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerType: AIProviderType.GEMINI,
+        modelCode: 'openrouter/auto',
+      }),
+    );
+
+    await expect(
+      service.generateText('ai_owner', {
+        taskType: AITaskType.POST_CLASSIFY,
+        modelConfigId: 'model-anthropic',
+        messages: [
+          {
+            role: 'user',
+            content: 'Ping',
+          },
+        ],
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        providerType: AIProviderType.ANTHROPIC,
+        text: '{"category":"Anthropic"}',
+      }),
+    );
+    expect(anthropicAdapter.generateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerType: AIProviderType.ANTHROPIC,
+        modelCode: 'claude-3-7-sonnet-latest',
+      }),
+    );
 
     await expect(
       service.generateText('ai_owner', {
@@ -214,4 +301,3 @@ describe('AiGatewayService', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 });
-
