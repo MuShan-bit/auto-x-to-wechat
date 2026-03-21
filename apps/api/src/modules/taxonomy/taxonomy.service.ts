@@ -23,6 +23,27 @@ export type EnsureTagCandidate = {
   slug?: string | null;
 };
 
+type NormalizedEnsureTagCandidate = {
+  color: string | null;
+  name: string;
+  slug: string;
+};
+
+const AUTO_TAG_COLOR_PALETTE = [
+  '#2563eb',
+  '#0f766e',
+  '#10b981',
+  '#7c3aed',
+  '#f97316',
+  '#dc2626',
+  '#0891b2',
+  '#ca8a04',
+  '#4f46e5',
+  '#db2777',
+  '#059669',
+  '#9333ea',
+];
+
 @Injectable()
 export class TaxonomyService {
   constructor(private readonly prisma: PrismaService) {}
@@ -196,13 +217,8 @@ export class TaxonomyService {
     const normalizedCandidates = candidates
       .map((candidate) => this.normalizeEnsureTagCandidate(candidate))
       .filter(
-        (
-          candidate,
-        ): candidate is {
-          color: string | null;
-          name: string;
-          slug: string;
-        } => candidate !== null,
+        (candidate): candidate is NormalizedEnsureTagCandidate =>
+          candidate !== null,
       );
 
     if (normalizedCandidates.length === 0) {
@@ -389,18 +405,32 @@ export class TaxonomyService {
     }
   }
 
-  private normalizeEnsureTagCandidate(candidate: EnsureTagCandidate) {
+  private normalizeEnsureTagCandidate(
+    candidate: EnsureTagCandidate,
+  ): NormalizedEnsureTagCandidate | null {
     const name = candidate.name.trim() || candidate.slug?.trim() || '';
 
     if (!name) {
       return null;
     }
 
+    const slug = normalizeTaxonomySlug(candidate.slug ?? name);
+
     return {
       name,
-      slug: normalizeTaxonomySlug(candidate.slug ?? name),
-      color: candidate.color ?? null,
+      slug,
+      color: candidate.color ?? this.pickAutoTagColor(slug),
     };
+  }
+
+  private pickAutoTagColor(slug: string) {
+    let hash = 0;
+
+    for (const character of slug) {
+      hash = (hash * 33 + character.charCodeAt(0)) >>> 0;
+    }
+
+    return AUTO_TAG_COLOR_PALETTE[hash % AUTO_TAG_COLOR_PALETTE.length]!;
   }
 
   private rethrowTaxonomyConflict(error: unknown, entityName: string): never {

@@ -159,10 +159,12 @@ describe('TaxonomyService', () => {
         slug: 'openai',
       }),
       expect.objectContaining({
+        color: expect.stringMatching(/^#[0-9a-fA-F]{6}$/),
         name: 'Inference Ops',
         slug: 'inference-ops',
       }),
       expect.objectContaining({
+        color: expect.stringMatching(/^#[0-9a-fA-F]{6}$/),
         name: 'Inference Ops',
         slug: 'inference-ops',
       }),
@@ -179,6 +181,7 @@ describe('TaxonomyService', () => {
       }),
     ).resolves.toEqual([
       expect.objectContaining({
+        color: expect.stringMatching(/^#[0-9a-fA-F]{6}$/),
         slug: 'inference-ops',
       }),
       expect.objectContaining({
