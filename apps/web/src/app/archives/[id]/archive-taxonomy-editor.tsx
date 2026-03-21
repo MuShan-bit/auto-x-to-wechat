@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useMemo, useState } from "react";
+import { Check, ChevronDown, Search, X } from "lucide-react";
 import {
   type ArchiveTaxonomyActionState,
   updateArchiveTaxonomyAction,
@@ -14,7 +15,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { getMessages, type Locale } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 export type TaxonomyOption = {
   color: string | null;
@@ -85,6 +88,38 @@ export function ArchiveTaxonomyEditor({
   );
   const currentTags = visibleTagAssignments.map((assignment) => assignment.tag);
   const currentTagIdSet = new Set(currentTags.map((tag) => tag.id));
+  const [isTagPickerOpen, setIsTagPickerOpen] = useState(false);
+  const [tagSearchKeyword, setTagSearchKeyword] = useState("");
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>(
+    Array.from(currentTagIdSet),
+  );
+  const selectedTagIdSet = useMemo(
+    () => new Set(selectedTagIds),
+    [selectedTagIds],
+  );
+  const selectedTags = useMemo(
+    () => tags.filter((tag) => selectedTagIdSet.has(tag.id)),
+    [selectedTagIdSet, tags],
+  );
+  const filteredTags = useMemo(() => {
+    const normalizedKeyword = tagSearchKeyword.trim().toLowerCase();
+
+    if (!normalizedKeyword) {
+      return tags;
+    }
+
+    return tags.filter((tag) =>
+      tag.name.toLowerCase().includes(normalizedKeyword),
+    );
+  }, [tagSearchKeyword, tags]);
+
+  function toggleTagSelection(tagId: string) {
+    setSelectedTagIds((current) =>
+      current.includes(tagId)
+        ? current.filter((item) => item !== tagId)
+        : [...current, tagId],
+    );
+  }
 
   return (
     <Card className="rounded-[2rem] border-border/70 bg-white/92 shadow-[0_24px_80px_-40px_rgba(45,77,63,0.24)] dark:border-white/10 dark:bg-white/6 dark:shadow-[0_24px_80px_-40px_rgba(0,0,0,0.5)]">
@@ -143,6 +178,9 @@ export function ArchiveTaxonomyEditor({
 
         <form action={formAction} className="space-y-5">
           <input type="hidden" name="archiveId" value={archiveId} />
+          {selectedTagIds.map((tagId) => (
+            <input key={tagId} type="hidden" name="tagIds" value={tagId} />
+          ))}
 
           <div className="space-y-2">
             <label
@@ -176,22 +214,105 @@ export function ArchiveTaxonomyEditor({
               </p>
             </div>
             {tags.length > 0 ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {tags.map((tag) => (
-                  <label
-                    key={tag.id}
-                    className="flex items-center gap-3 rounded-2xl border border-border/70 bg-[#fcfaf5] px-4 py-3 text-sm text-foreground transition-colors hover:border-[#2d4d3f] dark:border-white/10 dark:bg-white/8 dark:hover:border-[#d8e2db]"
-                  >
-                    <input
-                      className="size-4 rounded border-border/70 text-[#2d4d3f] focus:ring-[#2d4d3f] dark:border-white/20 dark:bg-white/10 dark:text-[#d8e2db]"
-                      defaultChecked={currentTagIdSet.has(tag.id)}
-                      name="tagIds"
-                      type="checkbox"
-                      value={tag.id}
-                    />
-                    <span className="flex-1">{tag.name}</span>
-                  </label>
-                ))}
+              <div className="space-y-3">
+                <Button
+                  aria-expanded={isTagPickerOpen}
+                  className="h-auto w-full justify-between rounded-2xl border border-border/70 bg-[#fcfaf5] px-4 py-3 text-left text-sm font-normal text-foreground hover:border-[#2d4d3f] hover:bg-[#fcfaf5] dark:border-white/10 dark:bg-white/8 dark:hover:border-[#d8e2db] dark:hover:bg-white/8"
+                  onClick={() => setIsTagPickerOpen((current) => !current)}
+                  type="button"
+                  variant="outline"
+                >
+                  <div className="min-w-0 space-y-1">
+                    <p className="truncate font-medium text-foreground">
+                      {selectedTags.length > 0
+                        ? messages.archiveDetail.selectedTagsCount.replace(
+                            "{count}",
+                            String(selectedTags.length),
+                          )
+                        : messages.archiveDetail.chooseTags}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {selectedTags.length > 0
+                        ? selectedTags.map((tag) => tag.name).join(" / ")
+                        : messages.archiveDetail.tagPickerHint}
+                    </p>
+                  </div>
+                  <ChevronDown
+                    className={cn(
+                      "size-4 shrink-0 text-muted-foreground transition-transform",
+                      isTagPickerOpen ? "rotate-180" : "",
+                    )}
+                  />
+                </Button>
+
+                {selectedTags.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedTags.map((tag) => (
+                      <button
+                        key={tag.id}
+                        className="inline-flex items-center gap-1 rounded-full bg-[#eef4f0] px-3 py-1 text-xs text-[#2d4d3f] transition-colors hover:bg-[#dfeae3] dark:bg-[#223228] dark:text-[#d8e2db] dark:hover:bg-[#2b3f33]"
+                        onClick={() => toggleTagSelection(tag.id)}
+                        type="button"
+                      >
+                        <span>{tag.name}</span>
+                        <X className="size-3" />
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                {isTagPickerOpen ? (
+                  <div className="space-y-3 rounded-2xl border border-border/70 bg-[#fcfaf5] p-3 dark:border-white/10 dark:bg-white/8">
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        className="h-10 rounded-xl border-border/70 bg-white pl-9 dark:border-white/10 dark:bg-[#101511]"
+                        onChange={(event) =>
+                          setTagSearchKeyword(event.currentTarget.value)
+                        }
+                        placeholder={
+                          messages.archiveDetail.searchTagsPlaceholder
+                        }
+                        value={tagSearchKeyword}
+                      />
+                    </div>
+
+                    <div className="max-h-72 overflow-y-auto rounded-xl border border-border/70 bg-white dark:border-white/10 dark:bg-[#101511]">
+                      {filteredTags.length > 0 ? (
+                        <div className="divide-y divide-border/60 dark:divide-white/10">
+                          {filteredTags.map((tag) => {
+                            const isSelected = selectedTagIdSet.has(tag.id);
+
+                            return (
+                              <button
+                                key={tag.id}
+                                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-foreground transition-colors hover:bg-[#f3eee4] dark:hover:bg-white/8"
+                                onClick={() => toggleTagSelection(tag.id)}
+                                type="button"
+                              >
+                                <span
+                                  className={cn(
+                                    "flex size-5 items-center justify-center rounded-md border border-border/70 bg-white dark:border-white/10 dark:bg-transparent",
+                                    isSelected
+                                      ? "border-[#2d4d3f] bg-[#2d4d3f] text-white dark:border-[#d8e2db] dark:bg-[#d8e2db] dark:text-[#18201b]"
+                                      : "text-transparent",
+                                  )}
+                                >
+                                  <Check className="size-3.5" />
+                                </span>
+                                <span className="flex-1">{tag.name}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="px-4 py-6 text-sm text-muted-foreground">
+                          {messages.archiveDetail.noMatchingTags}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div className="rounded-2xl border border-dashed border-border/70 bg-[#fcfaf5] px-4 py-3 text-sm text-muted-foreground dark:border-white/10 dark:bg-white/8">

@@ -573,6 +573,11 @@ type Messages = {
     primaryCategoryLabel: string;
     chooseCategory: string;
     tagsFieldLabel: string;
+    chooseTags: string;
+    tagPickerHint: string;
+    selectedTagsCount: string;
+    searchTagsPlaceholder: string;
+    noMatchingTags: string;
     taxonomyEditorHint: string;
     lockBadge: string;
     noTagOptions: string;
@@ -1461,6 +1466,11 @@ const messages: Record<Locale, Messages> = {
       primaryCategoryLabel: "主分类",
       chooseCategory: "不设置主分类",
       tagsFieldLabel: "标签选择",
+      chooseTags: "选择标签",
+      tagPickerHint: "展开后可搜索并多选标签",
+      selectedTagsCount: "已选 {count} 个标签",
+      searchTagsPlaceholder: "搜索标签名称",
+      noMatchingTags: "没有匹配的标签",
       taxonomyEditorHint:
         "这里编辑的是当前归档的最终标签集合。AI 自动创建的标签也会出现在同一套列表里，可直接修改或删除。",
       lockBadge: "已锁定",
@@ -2397,6 +2407,11 @@ const messages: Record<Locale, Messages> = {
       primaryCategoryLabel: "Primary category",
       chooseCategory: "No primary category",
       tagsFieldLabel: "Tag selection",
+      chooseTags: "Choose tags",
+      tagPickerHint: "Expand to search and multi-select tags",
+      selectedTagsCount: "{count} tags selected",
+      searchTagsPlaceholder: "Search tags",
+      noMatchingTags: "No matching tags",
       taxonomyEditorHint:
         "You are editing the final tag set for this archive. Tags created by AI appear in the same shared pool and can be changed or removed here.",
       lockBadge: "Locked",
