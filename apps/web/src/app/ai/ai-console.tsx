@@ -627,7 +627,7 @@ function ProviderCard({
             <Button
               type="submit"
               className="rounded-full bg-[#2d4d3f] px-4 text-white hover:bg-[#244034] dark:bg-[#d8e2db] dark:text-[#18201b] dark:hover:bg-[#c7d4cc]"
-              disabled={testPending}
+              disabled={testPending || provider.models.length === 0}
             >
               {testPending
                 ? messages.ai.testingProvider
@@ -638,7 +638,9 @@ function ProviderCard({
       </div>
 
       <p className="mt-4 text-sm leading-6 text-muted-foreground">
-        {messages.ai.testWithDefaultModel}
+        {provider.models.length > 0
+          ? messages.ai.testWithDefaultModel
+          : messages.ai.testRequiresModel}
       </p>
 
       {provider.models.length > 0 ? (

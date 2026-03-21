@@ -428,6 +428,7 @@ type Messages = {
     testingProvider: string;
     testProvider: string;
     testWithDefaultModel: string;
+    testRequiresModel: string;
     setAsDefault: string;
     defaultBadge: string;
     enabledBadge: string;
@@ -1252,6 +1253,7 @@ const messages: Record<Locale, Messages> = {
       testingProvider: "测试中...",
       testProvider: "测试连接",
       testWithDefaultModel: "使用默认 / 首个模型测试",
+      testRequiresModel: "请先为该提供商新增至少一个模型，再发起连接测试。",
       setAsDefault: "设为默认",
       defaultBadge: "默认",
       enabledBadge: "已启用",
@@ -2131,6 +2133,8 @@ const messages: Record<Locale, Messages> = {
       testingProvider: "Testing...",
       testProvider: "Test connection",
       testWithDefaultModel: "Test with default / first model",
+      testRequiresModel:
+        "Add at least one model under this provider before running a connection test.",
       setAsDefault: "Set default",
       defaultBadge: "Default",
       enabledBadge: "Enabled",
