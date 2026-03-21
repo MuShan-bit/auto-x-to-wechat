@@ -27,7 +27,7 @@ export class ApiRequestError extends Error {
   }
 }
 
-function buildApiErrorMessage(status: number, payload: string) {
+export function buildApiErrorMessage(status: number, payload: string) {
   const message = `API request failed with status ${status}`;
 
   if (!payload) {
@@ -37,16 +37,16 @@ function buildApiErrorMessage(status: number, payload: string) {
   try {
     const parsed = JSON.parse(payload) as ApiErrorPayload;
 
-    if (typeof parsed.error === "string" && parsed.error.length > 0) {
-      return parsed.error;
-    }
-
     if (typeof parsed.message === "string" && parsed.message.length > 0) {
       return parsed.message;
     }
 
     if (Array.isArray(parsed.message) && parsed.message.length > 0) {
       return parsed.message.join("；");
+    }
+
+    if (typeof parsed.error === "string" && parsed.error.length > 0) {
+      return parsed.error;
     }
   } catch {
     return payload;
